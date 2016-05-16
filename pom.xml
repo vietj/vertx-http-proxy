@@ -54,6 +54,7 @@
       <artifactId>vertx-core</artifactId>
     </dependency>
 
+<!--
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-discovery-service</artifactId>
@@ -62,6 +63,7 @@
       <groupId>io.vertx</groupId>
       <artifactId>vertx-discovery-bridge-docker</artifactId>
     </dependency>
+-->
 
     <dependency>
       <groupId>com.beust</groupId>

@@ -4,8 +4,9 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpServer;
-import io.vertx.ext.reverseproxy.Backend;
+import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.HttpProxy;
 import io.vertx.ext.reverseproxy.HttpProxyOptions;
 
@@ -20,7 +21,7 @@ public class HttpProxyImpl implements HttpProxy {
   private final Vertx vertx;
   private final HttpProxyOptions options;
   private Router router;
-  private List<Backend> clients = new ArrayList<>();
+  private List<BackendProvider> clients = new ArrayList<>();
 
   public HttpProxyImpl(Vertx vertx, HttpProxyOptions options) {
     this.options = new HttpProxyOptions(options);
@@ -28,7 +29,7 @@ public class HttpProxyImpl implements HttpProxy {
   }
 
   @Override
-  public synchronized HttpProxy addBackend(Backend client) {
+  public synchronized HttpProxy addBackend(BackendProvider client) {
     clients.add(client);
     return this;
   }
@@ -38,8 +39,9 @@ public class HttpProxyImpl implements HttpProxy {
     if (router != null) {
       throw new IllegalStateException();
     }
+    HttpClient client = vertx.createHttpClient(options.getClientOptions());
     HttpServer server = vertx.createHttpServer(options.getServerOptions());
-    router = new Router(server, new ArrayList<>(clients));
+    router = new Router(client, server, new ArrayList<>(clients));
     server.requestHandler(router::handle);
     server.listen(ar -> {
       if (ar.succeeded()) {

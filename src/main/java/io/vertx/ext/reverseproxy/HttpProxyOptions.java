@@ -1,6 +1,7 @@
 package io.vertx.ext.reverseproxy;
 
 import io.vertx.codegen.annotations.DataObject;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonObject;
 
@@ -10,6 +11,7 @@ import io.vertx.core.json.JsonObject;
 @DataObject
 public class HttpProxyOptions {
 
+  private HttpClientOptions clientOptions = new HttpClientOptions();
   private HttpServerOptions serverOptions = new HttpServerOptions();
 
   public HttpProxyOptions() {
@@ -19,7 +21,16 @@ public class HttpProxyOptions {
   }
 
   public HttpProxyOptions(HttpProxyOptions that) {
+    clientOptions = new HttpClientOptions(that.clientOptions);
     serverOptions = new HttpServerOptions(that.serverOptions);
+  }
+
+  public HttpClientOptions getClientOptions() {
+    return clientOptions;
+  }
+
+  public void setClientOptions(HttpClientOptions clientOptions) {
+    this.clientOptions = clientOptions;
   }
 
   public HttpServerOptions getServerOptions() {

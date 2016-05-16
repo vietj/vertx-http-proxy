@@ -1,4 +1,4 @@
-package io.vertx.ext.reverseproxy.impl;
+package io.vertx.ext.reverseproxy.backend.docker;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.model.Container;
@@ -11,7 +11,8 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
-import io.vertx.ext.reverseproxy.Backend;
+import io.vertx.core.net.impl.SocketAddressImpl;
+import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.ProxyRequest;
 
 import java.io.IOException;
@@ -23,7 +24,7 @@ import java.util.Map;
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-public class DockerBackend implements Backend {
+public class DockerProvider implements BackendProvider {
 
   private final Vertx vertx;
   private List<Server> servers = new ArrayList<>();
@@ -48,7 +49,7 @@ public class DockerBackend implements Backend {
     }
   }
 
-  public DockerBackend(Vertx vertx) {
+  public DockerProvider(Vertx vertx) {
     this.vertx = vertx;
   }
 
@@ -123,7 +124,7 @@ public class DockerBackend implements Backend {
                 });
             serverMap.clear();
             serverMap.putAll(newServerMap);
-            synchronized (DockerBackend.this) {
+            synchronized (DockerProvider.this) {
               this.servers = new ArrayList<>(serverMap.values());
               if (started) {
                 vertx.runOnContext(v1 -> refresh(v2 -> {}));
@@ -140,11 +141,7 @@ public class DockerBackend implements Backend {
     synchronized (this) {
       for (Server server : servers) {
         if (request.frontRequest().path().startsWith(server.route)) {
-          HttpClientOptions options = new HttpClientOptions();
-          options.setDefaultHost(server.address);
-          options.setDefaultPort(server.port);
-          HttpClient client = vertx.createHttpClient(options);
-          request.pass(client);
+          request.handle(() -> new SocketAddressImpl(server.port, server.address));
           return;
         }
       }

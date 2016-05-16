@@ -6,8 +6,10 @@ import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.Pump;
-import io.vertx.ext.reverseproxy.Backend;
+import io.vertx.ext.reverseproxy.backend.Backend;
+import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.ProxyRequest;
 
 import java.util.List;
@@ -17,12 +19,14 @@ import java.util.List;
  */
 class Router {
 
+  final HttpClient client;
   final HttpServer server;
-  final List<Backend> backends;
+  final List<BackendProvider> backends;
 
-  public Router(HttpServer server, List<Backend> backends) {
+  public Router(HttpClient client, HttpServer server, List<BackendProvider> backends) {
     this.server = server;
     this.backends = backends;
+    this.client = client;
   }
 
   public void handle(HttpServerRequest req) {
@@ -30,9 +34,9 @@ class Router {
     request.next();
   }
 
-  private static class Request implements ProxyRequest {
+  private class Request implements ProxyRequest {
 
-    private final List<Backend> backends;
+    private final List<BackendProvider> backends;
     private final HttpServerRequest frontRequest;
     private final HttpServerResponse frontResponse;
     private HttpClientRequest backRequest;
@@ -42,7 +46,7 @@ class Router {
     private boolean closed;
     private int index;
 
-    public Request(HttpServerRequest frontRequest, List<Backend> backends) {
+    public Request(HttpServerRequest frontRequest, List<BackendProvider> backends) {
       this.frontRequest = frontRequest;
       this.frontResponse = frontRequest.response();
       this.index = 0;
@@ -78,8 +82,9 @@ class Router {
     }
 
     @Override
-    public void pass(HttpClient client) {
-      backRequest = client.request(frontRequest.method(), frontRequest.uri());
+    public void handle(Backend backend) {
+      SocketAddress address = backend.next();
+      backRequest = client.request(frontRequest.method(), address.port(), address.host(), frontRequest.uri());
       backRequest.handler(this::handle);
 
       // Set headers, don't copy host, as HttpClient will set it
@@ -100,7 +105,7 @@ class Router {
     @Override
     public void next() {
       if (index < backends.size()) {
-        Backend backend = backends.get(index++);
+        BackendProvider backend = backends.get(index++);
         backend.handle(this);
       } else {
         frontRequest.resume();

@@ -3,11 +3,12 @@ package io.vertx.ext.reverseproxy;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
-import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.net.impl.SocketAddressImpl;
+import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
@@ -20,9 +21,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class HttpTest extends ProxyTestBase {
 
-  private HttpProxy startProxy(TestContext ctx, Backend... backends) {
+  private HttpProxy startProxy(TestContext ctx, BackendProvider... backends) {
     HttpProxy proxy = HttpProxy.createProxy(vertx, options);
-    for (Backend backend : backends) {
+    for (BackendProvider backend : backends) {
       proxy.addBackend(backend);
     }
     Async async1 = ctx.async();
@@ -31,16 +32,16 @@ public class HttpTest extends ProxyTestBase {
     return proxy;
   }
 
-  private Backend startBackend(TestContext ctx, int port, Handler<HttpServerRequest> handler) {
+  private BackendProvider startBackend(TestContext ctx, int port, Handler<HttpServerRequest> handler) {
     HttpServer backendServer = vertx.createHttpServer(new HttpServerOptions().setPort(port).setHost("localhost"));
     backendServer.requestHandler(handler);
     Async async = ctx.async();
     backendServer.listen(ctx.asyncAssertSuccess(s -> async.complete()));
     async.awaitSuccess();
-    return new Backend() {
+    return new BackendProvider() {
       @Override
       public void handle(ProxyRequest request) {
-        request.pass(vertx.createHttpClient(new HttpClientOptions().setDefaultPort(port).setDefaultHost("localhost")));
+        request.handle(() -> new SocketAddressImpl(port, "localhost"));
       }
     };
   }
@@ -58,7 +59,7 @@ public class HttpTest extends ProxyTestBase {
 
   @Test
   public void testGet(TestContext ctx) {
-    Backend backend = startBackend(ctx, 8081, req -> {
+    BackendProvider backend = startBackend(ctx, 8081, req -> {
       ctx.assertEquals("/somepath", req.uri());
       ctx.assertEquals("localhost:8081", req.host());
       req.response().end("Hello World");
@@ -81,7 +82,7 @@ public class HttpTest extends ProxyTestBase {
     Random random = new Random();
     random.nextBytes(body);
     Async async = ctx.async(2);
-    Backend backend = startBackend(ctx, 8081, req -> {
+    BackendProvider backend = startBackend(ctx, 8081, req -> {
       req.bodyHandler(buff -> {
         req.response().end();
         ctx.assertEquals(Buffer.buffer(body), buff);
@@ -101,7 +102,7 @@ public class HttpTest extends ProxyTestBase {
 
   @Test
   public void testProxyCloseDuringUpload(TestContext ctx) {
-    Backend backend = startBackend(ctx, 8081, req -> {
+    BackendProvider backend = startBackend(ctx, 8081, req -> {
       AtomicInteger len = new AtomicInteger();
       req.handler(buff -> {
         if (len.addAndGet(buff.length()) == 1024) {

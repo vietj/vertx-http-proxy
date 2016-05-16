@@ -3,7 +3,7 @@ package io.vertx.ext.reverseproxy;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import io.vertx.core.Vertx;
-import io.vertx.ext.reverseproxy.impl.DockerBackend;
+import io.vertx.ext.reverseproxy.backend.docker.DockerProvider;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -22,7 +22,7 @@ public class Main {
 
   public void run() {
     Vertx vertx = Vertx.vertx();
-    DockerBackend backend = new DockerBackend(vertx);
+    DockerProvider backend = new DockerProvider(vertx);
     HttpProxyOptions options = new HttpProxyOptions();
     options.getServerOptions().setPort(port);
     HttpProxy proxy = HttpProxy.createProxy(vertx, options);

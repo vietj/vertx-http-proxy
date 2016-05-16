@@ -1,7 +1,5 @@
 package io.vertx.ext.reverseproxy;
 
-import io.vertx.ext.reverseproxy.impl.DockerBackend;
-import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
 

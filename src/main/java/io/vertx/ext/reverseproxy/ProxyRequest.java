@@ -1,8 +1,8 @@
 package io.vertx.ext.reverseproxy;
 
 import io.vertx.codegen.annotations.VertxGen;
-import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.ext.reverseproxy.backend.Backend;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -15,12 +15,7 @@ public interface ProxyRequest {
    */
   HttpServerRequest frontRequest();
 
-  /**
-   * Pass the proxy request to the client.
-   *
-   * @param client the client to use
-   */
-  void pass(HttpClient client);
+  void handle(Backend backend);
 
   void next();
 

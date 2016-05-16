@@ -5,6 +5,7 @@ import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.impl.HttpProxyImpl;
 
 /**
@@ -22,7 +23,7 @@ public interface HttpProxy {
   }
 
   @Fluent
-  HttpProxy addBackend(Backend client);
+  HttpProxy addBackend(BackendProvider client);
 
   @Fluent
   HttpProxy listen(Handler<AsyncResult<HttpProxy>> completionHandler);

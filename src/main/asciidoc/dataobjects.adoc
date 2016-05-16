@@ -12,6 +12,7 @@
 [frame="topbot"]
 |===
 ^|Name | Type ^| Description
+|[[clientOptions]]`clientOptions`|`link:dataobjects.html#HttpClientOptions[HttpClientOptions]`|-
 |[[serverOptions]]`serverOptions`|`link:dataobjects.html#HttpServerOptions[HttpServerOptions]`|-
 |===
 

@@ -1,21 +1,21 @@
-package io.vertx.ext.reverseproxy;
+package io.vertx.ext.reverseproxy.backend;
 
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
-import io.vertx.core.http.HttpClient;
-import io.vertx.ext.reverseproxy.impl.DockerBackend;
+import io.vertx.ext.reverseproxy.ProxyRequest;
+import io.vertx.ext.reverseproxy.backend.docker.DockerProvider;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
 @VertxGen
-public interface Backend {
+public interface BackendProvider {
 
-  static Backend create(Vertx vertx) {
-    return new DockerBackend(vertx);
+  static BackendProvider create(Vertx vertx) {
+    return new DockerProvider(vertx);
   }
 
   default void start(Handler<AsyncResult<Void>> doneHandler) {

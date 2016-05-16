@@ -12,11 +12,11 @@ import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.ext.reverseproxy.Backend;
+import io.vertx.ext.reverseproxy.ProxyRequest;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -136,19 +136,19 @@ public class DockerBackend implements Backend {
   }
 
   @Override
-  public void getClient(String host, String path, Handler<HttpClient> handler) {
+  public void handle(ProxyRequest request) {
     synchronized (this) {
       for (Server server : servers) {
-        if (path.startsWith(server.route)) {
+        if (request.frontRequest().path().startsWith(server.route)) {
           HttpClientOptions options = new HttpClientOptions();
           options.setDefaultHost(server.address);
           options.setDefaultPort(server.port);
           HttpClient client = vertx.createHttpClient(options);
-          handler.handle(client);
+          request.pass(client);
           return;
         }
       }
     }
-    handler.handle(null);
+    request.next();
   }
 }

@@ -13,6 +13,7 @@ import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
 
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -38,8 +39,8 @@ public class HttpTest extends ProxyTestBase {
     async.awaitSuccess();
     return new Backend() {
       @Override
-      public void getClient(String host, String path, Handler<HttpClient> handler) {
-        handler.handle(vertx.createHttpClient(new HttpClientOptions().setDefaultPort(port).setDefaultHost("localhost")));
+      public void handle(ProxyRequest request) {
+        request.pass(vertx.createHttpClient(new HttpClientOptions().setDefaultPort(port).setDefaultHost("localhost")));
       }
     };
   }
@@ -58,12 +59,14 @@ public class HttpTest extends ProxyTestBase {
   @Test
   public void testGet(TestContext ctx) {
     Backend backend = startBackend(ctx, 8081, req -> {
+      ctx.assertEquals("/somepath", req.uri());
+      ctx.assertEquals("localhost:8081", req.host());
       req.response().end("Hello World");
     });
     startProxy(ctx, backend);
     HttpClient client = vertx.createHttpClient();
     Async async = ctx.async();
-    client.getNow(8080, "localhost", "/", resp -> {
+    client.getNow(8080, "localhost", "/somepath", resp -> {
       ctx.assertEquals(200, resp.statusCode());
       resp.bodyHandler(buff -> {
         ctx.assertEquals("Hello World", buff.toString());
@@ -94,5 +97,30 @@ public class HttpTest extends ProxyTestBase {
       });
     });
     req.end(Buffer.buffer(body));
+  }
+
+  @Test
+  public void testProxyCloseDuringUpload(TestContext ctx) {
+    Backend backend = startBackend(ctx, 8081, req -> {
+      AtomicInteger len = new AtomicInteger();
+      req.handler(buff -> {
+        if (len.addAndGet(buff.length()) == 1024) {
+          req.connection().close();
+        }
+      });
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
+      ctx.assertEquals(200, resp.statusCode());
+    });
+    Async async = ctx.async();
+    req.connectionHandler(conn -> {
+      conn.closeHandler(v -> {
+        async.complete();
+      });
+    });
+    req.putHeader("Content-Length", "2048");
+    req.write(Buffer.buffer(new byte[1024]));
   }
 }

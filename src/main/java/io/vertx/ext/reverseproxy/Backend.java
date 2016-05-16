@@ -25,6 +25,6 @@ public interface Backend {
   default void stop(Handler<AsyncResult<Void>> doneHandler) {
   }
 
-  void getClient(String host, String path, Handler<HttpClient> handler);
+  void handle(ProxyRequest request);
 
 }

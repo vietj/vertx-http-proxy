@@ -27,6 +27,7 @@ class Router {
   }
 
   public void handle(HttpServerRequest request, int index) {
+    request.pause();
     HttpServerResponse response = request.response();
     if (index < clients.size()) {
       Backend backend = clients.get(index);
@@ -43,12 +44,17 @@ class Router {
               response.end();
             });
           });
-          proxyRequest.end();
+          proxyRequest.headers().setAll(request.headers());
+          request.resume();
+          request.endHandler(v -> proxyRequest.end());
+          Pump requestPump = Pump.pump(request, proxyRequest);
+          requestPump.start();
         } else {
           handle(request, index + 1);
         }
       });
     } else {
+      request.resume();
       response.setStatusCode(404).end();
     }
   }

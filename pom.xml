@@ -54,16 +54,14 @@
       <artifactId>vertx-core</artifactId>
     </dependency>
 
-<!--
     <dependency>
       <groupId>io.vertx</groupId>
-      <artifactId>vertx-discovery-service</artifactId>
+      <artifactId>vertx-service-discovery</artifactId>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
-      <artifactId>vertx-discovery-bridge-docker</artifactId>
+      <artifactId>vertx-service-discovery-bridge-docker</artifactId>
     </dependency>
--->
 
     <dependency>
       <groupId>com.beust</groupId>
@@ -79,42 +77,6 @@
       <artifactId>slf4j-api</artifactId>
       <version>1.7.16</version>
       <optional>true</optional>
-    </dependency>
-
-    <dependency>
-      <groupId>com.github.docker-java</groupId>
-      <artifactId>docker-java</artifactId>
-      <version>3.0.0-RC5</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-api</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-databind</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.javassist</groupId>
-          <artifactId>javassist</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>jcl-over-slf4j</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-codec-http</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-handler</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
     <dependency>

@@ -1,9 +1,5 @@
 package io.vertx.ext.reverseproxy.backend.docker;
 
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.model.Container;
-import com.github.dockerjava.api.model.ContainerPort;
-import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.core.DockerClientConfig;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -11,11 +7,14 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.impl.SocketAddressImpl;
 import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.ProxyRequest;
+import io.vertx.servicediscovery.Record;
+import io.vertx.servicediscovery.docker.DockerDiscoveryBridge;
+import io.vertx.servicediscovery.spi.ServiceDiscovery;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,13 +23,13 @@ import java.util.Map;
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-public class DockerProvider implements BackendProvider {
+public class DockerProvider implements BackendProvider, ServiceDiscovery {
 
   private final Vertx vertx;
   private List<Server> servers = new ArrayList<>();
   private Map<String, Server> serverMap = new HashMap<>();
-  private DockerClient client;
   private boolean started;
+  private DockerDiscoveryBridge bridge;
 
   private class Server {
 
@@ -60,80 +59,54 @@ public class DockerProvider implements BackendProvider {
     }
     DockerClientConfig.DockerClientConfigBuilder builder = DockerClientConfig.createDefaultConfigBuilder();
     builder.withDockerTlsVerify(false);
-    DockerClientConfig config = builder.build();
-    client = DockerClientBuilder.getInstance(config).build();
     started = true;
-    vertx.runOnContext(v1 -> {
-      refresh(v2 -> doneHandler.handle(Future.succeededFuture()));
-    });
+    bridge = new DockerDiscoveryBridge();
+    bridge.start(vertx, new ServiceDiscovery() {
+      @Override
+      public void publish(Record record, Handler<AsyncResult<Record>> resultHandler) {
+        String id = record.getMetadata().getString("docker.id");
+        if ("http.endpoint".equals(record.getMetadata().getString("service.type"))) {
+          String route = record.getMetadata().getString("service.route");
+          if (route != null) {
+            Server server = serverMap.get(id);
+            if  (server == null) {
+              int port = record.getLocation().getInteger("port");
+              String ip = record.getLocation().getString("ip");;
+              server = new Server(id, route, ip, port);
+              System.out.println("Discovery backend server " + server.id + " " + server.address + ":" + server.port);
+              serverMap.put(id, server);
+              synchronized (DockerProvider.this) {
+                servers = new ArrayList<>(serverMap.values());
+              }
+            }
+          }
+        }
+        record.setRegistration(id);
+        resultHandler.handle(Future.succeededFuture(record));
+      }
+
+      @Override
+      public void unpublish(String id, Handler<AsyncResult<Void>> resultHandler) {
+        Server server = serverMap.remove(id);
+        if (server != null) {
+          System.out.println("unpublished " + id);
+          server.client.close();
+          synchronized (DockerProvider.this) {
+            servers = new ArrayList<>(serverMap.values());
+          }
+        }
+        resultHandler.handle(Future.succeededFuture());
+      }
+    }, new JsonObject().put("docker-tls-verify", false), Future.future());
   }
 
   @Override
   public synchronized void stop(Handler<AsyncResult<Void>> doneHandler) {
     if (started) {
       started = false;
-      DockerClient c = client;
-      client = null;
-      vertx.executeBlocking(fut -> {
-        try {
-          c.close();
-          fut.complete();
-        } catch (IOException ignore) {
-          fut.fail(ignore);
-        }
-      }, ar -> doneHandler.handle(Future.succeededFuture()));
     } else {
       doneHandler.handle(Future.succeededFuture());
     }
-  }
-
-  private void refresh(Handler<Void> doneHandler) {
-    vertx.<List<Container>>executeBlocking(
-        future -> {
-          try {
-            future.complete(client.listContainersCmd().withStatusFilter("running").exec());
-          } catch (Exception e) {
-            future.fail(e);
-          }
-        }, ar -> {
-          if (ar.succeeded()) {
-            List<Container> running = ar.result();
-            Map<String, Server> newServerMap = new HashMap<>();
-            running.stream()
-                .forEach(container -> {
-                  Map<String, String> labels = container.getLabels();
-                  if ("http.endpoint".equals(labels.get("service.type"))) {
-                    String route = labels.get("service.route");
-                    String id = container.getId();
-                    if (route != null) {
-                      Server server = serverMap.get(id);
-                      if  (server == null) {
-                        ContainerPort port = container.getPorts()[0];
-                        server = new Server(id, route, port.getIp(), port.getPublicPort());
-                        System.out.println("Discovery backend server " + server.id + " " + server.address + ":" + server.port);
-                      }
-                      newServerMap.put(id, server);
-                    }
-                  }
-                });
-            serverMap.values().stream().
-                filter(server -> !newServerMap.containsKey(server.id)).
-                forEach(server -> {
-                  System.out.println("Closing backend server " + server.id + " " + server.address + ":" + server.port);
-                  server.client.close();
-                });
-            serverMap.clear();
-            serverMap.putAll(newServerMap);
-            synchronized (DockerProvider.this) {
-              this.servers = new ArrayList<>(serverMap.values());
-              if (started) {
-                vertx.runOnContext(v1 -> refresh(v2 -> {}));
-              }
-            }
-          }
-          doneHandler.handle(null);
-        }
-    );
   }
 
   @Override
@@ -147,5 +120,15 @@ public class DockerProvider implements BackendProvider {
       }
     }
     request.next();
+  }
+
+  @Override
+  public void publish(Record record, Handler<AsyncResult<Record>> resultHandler) {
+
+  }
+
+  @Override
+  public void unpublish(String id, Handler<AsyncResult<Void>> resultHandler) {
+
   }
 }

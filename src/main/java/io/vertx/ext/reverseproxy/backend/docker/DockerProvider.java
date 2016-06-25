@@ -12,8 +12,8 @@ import io.vertx.core.net.impl.SocketAddressImpl;
 import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.ProxyRequest;
 import io.vertx.servicediscovery.Record;
-import io.vertx.servicediscovery.docker.DockerDiscoveryBridge;
-import io.vertx.servicediscovery.spi.ServiceDiscovery;
+import io.vertx.servicediscovery.docker.DockerServiceImporter;
+import io.vertx.servicediscovery.spi.ServicePublisher;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,13 +23,13 @@ import java.util.Map;
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-public class DockerProvider implements BackendProvider, ServiceDiscovery {
+public class DockerProvider implements BackendProvider {
 
   private final Vertx vertx;
   private List<Server> servers = new ArrayList<>();
   private Map<String, Server> serverMap = new HashMap<>();
   private boolean started;
-  private DockerDiscoveryBridge bridge;
+  private DockerServiceImporter bridge;
 
   private class Server {
 
@@ -60,8 +60,8 @@ public class DockerProvider implements BackendProvider, ServiceDiscovery {
     DockerClientConfig.DockerClientConfigBuilder builder = DockerClientConfig.createDefaultConfigBuilder();
     builder.withDockerTlsVerify(false);
     started = true;
-    bridge = new DockerDiscoveryBridge();
-    bridge.start(vertx, new ServiceDiscovery() {
+    bridge = new DockerServiceImporter();
+    bridge.start(vertx, new ServicePublisher() {
       @Override
       public void publish(Record record, Handler<AsyncResult<Record>> resultHandler) {
         String id = record.getMetadata().getString("docker.id");
@@ -120,15 +120,5 @@ public class DockerProvider implements BackendProvider, ServiceDiscovery {
       }
     }
     request.next();
-  }
-
-  @Override
-  public void publish(Record record, Handler<AsyncResult<Record>> resultHandler) {
-
-  }
-
-  @Override
-  public void unpublish(String id, Handler<AsyncResult<Void>> resultHandler) {
-
   }
 }

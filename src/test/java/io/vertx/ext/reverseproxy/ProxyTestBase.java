@@ -2,6 +2,7 @@ package io.vertx.ext.reverseproxy;
 
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.ext.reverseproxy.config.HttpProxyOptions;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
 import org.junit.After;

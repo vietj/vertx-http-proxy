@@ -40,7 +40,7 @@ class Router {
     private final HttpServerRequest frontRequest;
     private final HttpServerResponse frontResponse;
     private HttpClientRequest backRequest;
-    private HttpClientResponse backResponse;
+//    private HttpClientResponse backResponse;
     private Pump requestPump;
     private Pump responsePump;
     private boolean closed;
@@ -65,7 +65,7 @@ class Router {
     }
 
     void handle(HttpClientResponse response) {
-      backResponse = response;
+//      backResponse = response;
       frontResponse.setStatusCode(response.statusCode());
       frontResponse.setStatusMessage(response.statusMessage());
       frontResponse.headers().addAll(response.headers());

@@ -4,19 +4,13 @@ import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
 import io.vertx.ext.reverseproxy.ProxyRequest;
-import io.vertx.ext.reverseproxy.backend.docker.DockerProvider;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
 @VertxGen
 public interface BackendProvider {
-
-  static BackendProvider create(Vertx vertx) {
-    return new DockerProvider(vertx);
-  }
 
   default void start(Handler<AsyncResult<Void>> doneHandler) {
     doneHandler.handle(Future.succeededFuture());

@@ -1,16 +1,13 @@
 package io.vertx.ext.reverseproxy.backend.docker;
 
-import com.github.dockerjava.core.DockerClientConfig;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
-import io.vertx.core.http.HttpClient;
-import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.impl.SocketAddressImpl;
-import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.ext.reverseproxy.ProxyRequest;
+import io.vertx.ext.reverseproxy.backend.BackendProvider;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.docker.DockerServiceImporter;
 import io.vertx.servicediscovery.spi.ServicePublisher;
@@ -19,6 +16,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.github.dockerjava.core.DockerClientConfig;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -37,14 +36,12 @@ public class DockerProvider implements BackendProvider {
     final String route;
     final String address;
     final int port;
-    final HttpClient client;
 
     public Server(String id, String route, String address, int port) {
       this.id = id;
       this.route = route;
       this.address = address;
       this.port = port;
-      this.client = vertx.createHttpClient(new HttpClientOptions().setDefaultHost(address).setDefaultPort(port));
     }
   }
 
@@ -73,7 +70,7 @@ public class DockerProvider implements BackendProvider {
               int port = record.getLocation().getInteger("port");
               String ip = record.getLocation().getString("ip");;
               server = new Server(id, route, ip, port);
-              System.out.println("Discovery backend server " + server.id + " " + server.address + ":" + server.port);
+              System.out.println("\tDiscovery backend server " + server.id + " " + server.address + ":" + server.port);
               serverMap.put(id, server);
               synchronized (DockerProvider.this) {
                 servers = new ArrayList<>(serverMap.values());
@@ -90,7 +87,6 @@ public class DockerProvider implements BackendProvider {
         Server server = serverMap.remove(id);
         if (server != null) {
           System.out.println("unpublished " + id);
-          server.client.close();
           synchronized (DockerProvider.this) {
             servers = new ArrayList<>(serverMap.values());
           }

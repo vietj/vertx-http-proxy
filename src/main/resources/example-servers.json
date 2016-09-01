@@ -1,0 +1,10 @@
+{
+  "servers" : [
+    {
+        "id" : "echo",
+        "route" : "/echo",
+        "address" : "localhost",
+        "port" : 9999
+    }
+  ]
+}

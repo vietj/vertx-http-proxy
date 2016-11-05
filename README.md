@@ -1,6 +1,6 @@
-# Vertx Reverse Proxy
+# Vert.x Gateway
 
-An http reverse proxy for microservices based on Vert.x , right now it can discover Docker containers on the same host.
+An API gateway for microservices based on Vert.x , right now it can discover Docker containers on the same host.
 
 Usage : _package_ and then run the _fatjar_ :
 

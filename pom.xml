@@ -26,10 +26,10 @@
     <version>20</version>
   </parent>
 
-  <artifactId>vertx-reverse-proxy</artifactId>
+  <artifactId>vertx-gateway</artifactId>
   <version>3.3.0-SNAPSHOT</version>
 
-  <name>Vert.x Reverse Proxy</name>
+  <name>Vert.x Gateway</name>
 
   <properties>
     <stack.version>3.3.0</stack.version>

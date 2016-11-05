@@ -11,9 +11,9 @@ import io.vertx.ext.reverseproxy.backend.Backend;
 public interface ProxyRequest {
 
   /**
-   * @return the front http request
+   * @return the client http request
    */
-  HttpServerRequest frontRequest();
+  HttpServerRequest clientRequest();
 
   void handle(Backend backend);
 

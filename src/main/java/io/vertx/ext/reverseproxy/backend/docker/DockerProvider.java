@@ -113,7 +113,7 @@ public class DockerProvider implements BackendProvider {
   public void handle(ProxyRequest request) {
     synchronized (this) {
       for (Server server : servers) {
-        if (request.frontRequest().path().startsWith(server.route)) {
+        if (request.clientRequest().path().startsWith(server.route)) {
           request.handle(() -> new SocketAddressImpl(server.port, server.address));
           return;
         }

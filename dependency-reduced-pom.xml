@@ -9,7 +9,7 @@
   <modelVersion>4.0.0</modelVersion>
   <artifactId>vertx-gateway</artifactId>
   <name>Vert.x Gateway</name>
-  <version>3.3.0-SNAPSHOT</version>
+  <version>3.4.0-SNAPSHOT</version>
   <build>
     <pluginManagement>
       <plugins>
@@ -97,19 +97,19 @@
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-docgen</artifactId>
-      <version>3.3.0</version>
+      <version>3.4.0-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-codetrans</artifactId>
-      <version>3.3.0</version>
+      <version>3.4.0-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-codegen</artifactId>
-      <version>3.3.0</version>
+      <version>3.4.0-SNAPSHOT</version>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -133,7 +133,7 @@
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-unit</artifactId>
-      <version>3.3.0</version>
+      <version>3.4.0-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -149,8 +149,7 @@
     </dependencies>
   </dependencyManagement>
   <properties>
-    <stack.version>3.3.0</stack.version>
-    <termd.version>1.0.2</termd.version>
+    <stack.version>3.4.0-SNAPSHOT</stack.version>
   </properties>
 </project>
 

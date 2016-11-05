@@ -4,7 +4,6 @@
 == HttpProxyOptions
 
 ++++
- @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
 ++++
 '''
 

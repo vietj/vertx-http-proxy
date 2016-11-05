@@ -16,3 +16,12 @@ docker run --rm -p 8082:8080 -l service.type=http.endpoint -l service.route=/hel
 ````
 
 Then backend server will be accessible on the proxy server under the `/hello` route.
+
+
+## Behavior notes
+
+The client posts a body and the backend closes the connection before upload is complete.
+The client gets a `502` response and its connection is closed.
+
+The client posts a body and the backend receives parts of the body then the client closes the connectino before
+the upload is complete. The backend gets its connection closed.

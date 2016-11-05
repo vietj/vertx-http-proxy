@@ -53,14 +53,26 @@ class Router {
       this.backends = backends;
     }
 
-    private void reset() {
+    private void resetClient() {
       if (!closed) {
         closed = true;
         requestPump.stop();
         if (responsePump != null) {
           responsePump.stop();
         }
+        frontRequest.response().setStatusCode(502).end();
         frontRequest.connection().close();
+      }
+    }
+
+    private void resetBackend() {
+      if (!closed) {
+        closed = true;
+        requestPump.stop();
+        if (responsePump != null) {
+          responsePump.start();
+        }
+        backRequest.reset();
       }
     }
 
@@ -93,10 +105,15 @@ class Router {
           backRequest.putHeader(header.getKey(), header.getValue());
         }
       });
-      frontRequest.endHandler(v -> backRequest.end());
+      frontRequest.endHandler(v ->
+          backRequest.end()
+      );
       requestPump = Pump.pump(frontRequest, backRequest);
       backRequest.exceptionHandler(err -> {
-        reset();
+        resetClient();
+      });
+      frontRequest.response().closeHandler(err -> {
+        resetBackend();
       });
       frontRequest.resume();
       requestPump.start();

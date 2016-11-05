@@ -14,6 +14,7 @@ import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
 
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -101,7 +102,7 @@ public class HttpTest extends ProxyTestBase {
   }
 
   @Test
-  public void testProxyCloseDuringUpload(TestContext ctx) {
+  public void testBackendClosesDuringUpload(TestContext ctx) {
     BackendProvider backend = startBackend(ctx, 8081, req -> {
       AtomicInteger len = new AtomicInteger();
       req.handler(buff -> {
@@ -112,16 +113,43 @@ public class HttpTest extends ProxyTestBase {
     });
     startProxy(ctx, backend);
     HttpClient client = vertx.createHttpClient();
-    HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
-      ctx.assertEquals(200, resp.statusCode());
+    AtomicBoolean responseReceived = new AtomicBoolean();
+    HttpClientRequest req = client.post(8080, "localhost", "/", resp -> {
+      ctx.assertEquals(502, resp.statusCode());
+      responseReceived.set(true);
     });
     Async async = ctx.async();
     req.connectionHandler(conn -> {
       conn.closeHandler(v -> {
+        ctx.assertTrue(responseReceived.get());
         async.complete();
       });
     });
     req.putHeader("Content-Length", "2048");
     req.write(Buffer.buffer(new byte[1024]));
+  }
+
+  @Test
+  public void testClientClosesDuringUpload(TestContext ctx) {
+    Async async = ctx.async();
+    Async closeLatch = ctx.async();
+    BackendProvider backend = startBackend(ctx, 8081, req -> {
+      req.response().closeHandler(v -> {
+        async.complete();
+      });
+      req.handler(buff -> {
+        if (!closeLatch.isCompleted()) {
+          closeLatch.complete();
+        }
+      });
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    HttpClientRequest req = client.post(8080, "localhost", "/", resp -> ctx.fail());
+    req.putHeader("Content-Length", "2048");
+    req.write(Buffer.buffer(new byte[1024]));
+    closeLatch.awaitSuccess(10000);
+    System.out.println("closing");
+    req.connection().close();
   }
 }

@@ -1,8 +1,8 @@
-package io.vertx.ext.reverseproxy;
+package io.vertx.httpproxy;
 
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.http.HttpServerRequest;
-import io.vertx.ext.reverseproxy.backend.Backend;
+import io.vertx.httpproxy.backend.Backend;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>

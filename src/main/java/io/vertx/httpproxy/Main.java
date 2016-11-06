@@ -1,9 +1,9 @@
-package io.vertx.ext.reverseproxy;
+package io.vertx.httpproxy;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import io.vertx.core.Vertx;
-import io.vertx.ext.reverseproxy.backend.docker.DockerProvider;
+import io.vertx.httpproxy.backend.docker.DockerProvider;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>

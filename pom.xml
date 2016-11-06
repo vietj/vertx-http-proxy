@@ -26,7 +26,7 @@
     <version>20</version>
   </parent>
 
-  <artifactId>vertx-gateway</artifactId>
+  <artifactId>vertx-reverse-proxy</artifactId>
   <version>3.4.0-SNAPSHOT</version>
 
   <name>Vert.x Gateway</name>
@@ -176,7 +176,7 @@
               <transformers>
                 <!-- add Main-Class to manifest file -->
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>io.vertx.ext.reverseproxy.Main</mainClass>
+                  <mainClass>io.vertx.httpproxy.Main</mainClass>
                 </transformer>
               </transformers>
             </configuration>

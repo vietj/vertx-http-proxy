@@ -1,4 +1,4 @@
-package io.vertx.ext.reverseproxy;
+package io.vertx.httpproxy;
 
 import io.vertx.ext.unit.TestContext;
 import org.junit.Test;

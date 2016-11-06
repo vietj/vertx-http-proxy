@@ -1,4 +1,4 @@
-package io.vertx.ext.reverseproxy;
+package io.vertx.httpproxy;
 
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
@@ -8,7 +8,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.impl.SocketAddressImpl;
-import io.vertx.ext.reverseproxy.backend.BackendProvider;
+import io.vertx.httpproxy.backend.BackendProvider;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import org.junit.Test;

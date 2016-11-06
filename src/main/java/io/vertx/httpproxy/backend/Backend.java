@@ -1,4 +1,4 @@
-package io.vertx.ext.reverseproxy.backend;
+package io.vertx.httpproxy.backend;
 
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.net.SocketAddress;

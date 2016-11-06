@@ -1,4 +1,4 @@
-package io.vertx.ext.reverseproxy.backend.docker;
+package io.vertx.httpproxy.backend.docker;
 
 import com.github.dockerjava.core.DockerClientConfig;
 import io.vertx.core.AsyncResult;
@@ -9,8 +9,8 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.impl.SocketAddressImpl;
-import io.vertx.ext.reverseproxy.backend.BackendProvider;
-import io.vertx.ext.reverseproxy.ProxyRequest;
+import io.vertx.httpproxy.backend.BackendProvider;
+import io.vertx.httpproxy.ProxyRequest;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.docker.DockerServiceImporter;
 import io.vertx.servicediscovery.spi.ServicePublisher;

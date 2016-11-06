@@ -1,4 +1,4 @@
-package io.vertx.ext.reverseproxy.impl;
+package io.vertx.httpproxy.impl;
 
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
@@ -8,9 +8,9 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.Pump;
-import io.vertx.ext.reverseproxy.backend.Backend;
-import io.vertx.ext.reverseproxy.backend.BackendProvider;
-import io.vertx.ext.reverseproxy.ProxyRequest;
+import io.vertx.httpproxy.backend.Backend;
+import io.vertx.httpproxy.backend.BackendProvider;
+import io.vertx.httpproxy.ProxyRequest;
 
 import java.util.List;
 

@@ -7,7 +7,7 @@
     <relativePath>../pom.xml/pom.xml</relativePath>
   </parent>
   <modelVersion>4.0.0</modelVersion>
-  <artifactId>vertx-gateway</artifactId>
+  <artifactId>vertx-reverse-proxy</artifactId>
   <name>Vert.x Gateway</name>
   <version>3.4.0-SNAPSHOT</version>
   <build>
@@ -84,7 +84,7 @@
               </filters>
               <transformers>
                 <transformer>
-                  <mainClass>io.vertx.ext.reverseproxy.Main</mainClass>
+                  <mainClass>io.vertx.httpproxy.Main</mainClass>
                 </transformer>
               </transformers>
             </configuration>

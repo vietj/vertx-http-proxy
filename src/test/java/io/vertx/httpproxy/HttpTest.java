@@ -184,4 +184,22 @@ public class HttpTest extends ProxyTestBase {
       });
     });
   }
+
+  @Test
+  public void testSuppressIncorrectWarningHeaders(TestContext ctx) {
+    Async latch = ctx.async();
+    BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
+      req.response()
+          .putHeader("date", "Tue, 15 Nov 1994 08:12:30 GMT")
+          .putHeader("warning", "199 Miscellaneous warning \"Tue, 15 Nov 1994 08:12:31 GMT\"")
+        .end();
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    client.getNow(8080, "localhost", "/", resp -> {
+      ctx.assertNotNull(resp.getHeader("date"));
+      ctx.assertNull(resp.getHeader("warning"));
+      latch.complete();
+    });
+  }
 }

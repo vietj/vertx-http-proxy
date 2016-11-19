@@ -82,6 +82,7 @@
                   </excludes>
                 </filter>
               </filters>
+              <shadedClassifierName>fat</shadedClassifierName>
               <transformers>
                 <transformer>
                   <mainClass>io.vertx.httpproxy.Main</mainClass>

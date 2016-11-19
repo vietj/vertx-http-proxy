@@ -56,7 +56,9 @@ class Router {
     private void resetClient() {
       if (!closed) {
         closed = true;
-        requestPump.stop();
+        if (requestPump != null) {
+          requestPump.stop();
+        }
         if (responsePump != null) {
           responsePump.stop();
         }
@@ -105,9 +107,10 @@ class Router {
           backRequest.putHeader(header.getKey(), header.getValue());
         }
       });
-      frontRequest.endHandler(v ->
-          backRequest.end()
-      );
+      frontRequest.endHandler(v -> {
+        requestPump = null;
+        backRequest.end();
+      });
       requestPump = Pump.pump(frontRequest, backRequest);
       backRequest.exceptionHandler(err -> {
         resetClient();

@@ -3,7 +3,7 @@
   <parent>
     <artifactId>vertx-ext-parent</artifactId>
     <groupId>io.vertx</groupId>
-    <version>20</version>
+    <version>23</version>
     <relativePath>../pom.xml/pom.xml</relativePath>
   </parent>
   <modelVersion>4.0.0</modelVersion>

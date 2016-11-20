@@ -2,8 +2,11 @@ package io.vertx.httpproxy.impl;
 
 import java.text.SimpleDateFormat;
 import java.time.DayOfWeek;
-import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -12,7 +15,7 @@ import java.util.TimeZone;
  */
 public class ParseUtils {
 
-  public static Instant parseDateHeaderDate(String value) {
+  public static Date parseDateHeaderDate(String value) {
     try {
       return parseHttpDate(value);
     } catch (Exception e) {
@@ -20,7 +23,7 @@ public class ParseUtils {
     }
   }
 
-  public static Instant parseWarningHeaderDate(String value) {
+  public static Date parseWarningHeaderDate(String value) {
     // warn-code
     int index = value.indexOf(' ');
     if (index > 0) {
@@ -46,16 +49,30 @@ public class ParseUtils {
     return null;
   }
 
-  private static final SimpleDateFormat RFC_850_DATE_TIME = new SimpleDateFormat("EEEEEEEEE, dd-MMM-yy HH:mm:ss zzz", Locale.US);
-  private static final SimpleDateFormat ASC_TIME = new SimpleDateFormat("EEE MMM dd HH:mm:ss yyyy", Locale.US);
+  private static SimpleDateFormat RFC_1123_DATE_TIME() {
+    SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
+    format.setTimeZone(TimeZone.getTimeZone("GMT"));
+    return format;
+  }
 
-  static {
-    RFC_850_DATE_TIME.setTimeZone(TimeZone.getTimeZone("GMT"));
-    ASC_TIME.setTimeZone(TimeZone.getTimeZone("GMT"));
+  private static SimpleDateFormat RFC_850_DATE_TIME() {
+    SimpleDateFormat format = new SimpleDateFormat("EEEEEEEEE, dd-MMM-yy HH:mm:ss zzz", Locale.US);
+    format.setTimeZone(TimeZone.getTimeZone("GMT"));
+    return format;
+  }
+
+  private static SimpleDateFormat ASC_TIME() {
+    SimpleDateFormat format = new SimpleDateFormat("EEE MMM dd HH:mm:ss yyyy", Locale.US);
+    format.setTimeZone(TimeZone.getTimeZone("GMT"));
+    return format;
+  }
+
+  public static String formatHttpDate(Date date) {
+    return RFC_1123_DATE_TIME().format(date);
   }
 
   // http://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.3.1
-  public static Instant parseHttpDate(String value) throws Exception {
+  public static Date parseHttpDate(String value) throws Exception {
     int sep = 0;
     while (true) {
       if (sep < value.length()) {
@@ -64,17 +81,17 @@ public class ParseUtils {
           String s = value.substring(0, sep);
           if (parseWkday(s) != null) {
             // rfc1123-date
-            return Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(value));
+            return RFC_1123_DATE_TIME().parse(value);
           } else if (parseWeekday(s) != null) {
             // rfc850-date
-            return RFC_850_DATE_TIME.parse(value).toInstant();
+            return RFC_850_DATE_TIME().parse(value);
           }
           return null;
         }  else if (c == ' ') {
           String s = value.substring(0, sep);
           if (parseWkday(s) != null) {
             // asctime-date
-            return ASC_TIME.parse(value).toInstant();
+            return ASC_TIME().parse(value);
           }
           return null;
         }

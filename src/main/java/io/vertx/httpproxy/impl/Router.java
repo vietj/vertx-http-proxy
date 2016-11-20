@@ -1,7 +1,5 @@
 package io.vertx.httpproxy.impl;
 
-import io.vertx.core.MultiMap;
-import io.vertx.core.http.CaseInsensitiveHeaders;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
@@ -14,8 +12,8 @@ import io.vertx.httpproxy.backend.Backend;
 import io.vertx.httpproxy.backend.BackendProvider;
 import io.vertx.httpproxy.ProxyRequest;
 
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 
@@ -88,33 +86,56 @@ class Router {
       frontResponse.setStatusCode(response.statusCode());
       frontResponse.setStatusMessage(response.statusMessage());
 
-      MultiMap headers = response.headers();
-
-      // Suppress incorrect warning header
-      String dateHeader = headers.get("date");
-      if (dateHeader != null) {
-        List<String> warningHeaders = headers.getAll("warning");
+      // Date header
+      String dateHeader = response.headers().get("date");
+      Date date = null;
+      if (dateHeader == null) {
+        List<String> warningHeaders = response.headers().getAll("warning");
         if (warningHeaders.size() > 0) {
-          warningHeaders = new ArrayList<>(warningHeaders);
-          Instant dateInstant = ParseUtils.parseDateHeaderDate(dateHeader);
-          Iterator<String> i = warningHeaders.iterator();
-          boolean removed = false;
-          while (i.hasNext()) {
-            String warningHeader = i.next();
-            Instant warningInstant = ParseUtils.parseWarningHeaderDate(warningHeader);
-            if (warningInstant != null && dateInstant != null && !warningInstant.equals(dateInstant)) {
-              removed = true;
-              i.remove();
+          for (String warningHeader : warningHeaders) {
+            date = ParseUtils.parseWarningHeaderDate(warningHeader);
+            if (date != null) {
+              break;
             }
           }
-          if (removed) {
-            headers = new CaseInsensitiveHeaders().addAll(headers);
-            headers.set("warning", warningHeaders);
+        }
+      } else {
+        date = ParseUtils.parseWarningHeaderDate(dateHeader);
+      }
+      if (date == null) {
+        date = new Date();
+      }
+      try {
+        frontResponse.putHeader("date", ParseUtils.formatHttpDate(date));
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+
+      // Suppress incorrect warning header
+      List<String> warningHeaders = response.headers().getAll("warning");
+      if (warningHeaders.size() > 0) {
+        warningHeaders = new ArrayList<>(warningHeaders);
+        Date dateInstant = ParseUtils.parseDateHeaderDate(dateHeader);
+        Iterator<String> i = warningHeaders.iterator();
+        while (i.hasNext()) {
+          String warningHeader = i.next();
+          Date warningInstant = ParseUtils.parseWarningHeaderDate(warningHeader);
+          if (warningInstant != null && dateInstant != null && !warningInstant.equals(dateInstant)) {
+            i.remove();
           }
         }
       }
+      frontResponse.putHeader("warning", warningHeaders);
 
-      frontResponse.headers().addAll(headers);
+      // Handle other headers
+      response.headers().forEach(header -> {
+        if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning")) {
+          // Skip
+        } else {
+          frontResponse.headers().add(header.getKey(), header.getValue());
+        }
+      });
+
       responsePump = Pump.pump(response, frontResponse);
       responsePump.start();
       response.endHandler(v -> {

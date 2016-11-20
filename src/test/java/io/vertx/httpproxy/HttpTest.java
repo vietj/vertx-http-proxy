@@ -4,6 +4,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.http.HttpConnection;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
@@ -16,6 +17,7 @@ import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
 
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -166,6 +168,30 @@ public class HttpTest extends ProxyTestBase {
     req.write(Buffer.buffer(new byte[1024]));
     closeLatch.awaitSuccess(10000);
     req.connection().close();
+  }
+
+  @Test
+  public void testClientClosesAfterUpload(TestContext ctx) {
+    Async async = ctx.async();
+    Async closeLatch = ctx.async();
+    BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
+      req.endHandler(v -> {
+        closeLatch.complete();
+        vertx.setTimer(200, id -> {
+          req.response().setChunked(true).write("partial response");
+        });
+      });
+      req.response().closeHandler(v -> {
+        async.complete();
+      });
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    HttpClientRequest req = client.post(8080, "localhost", "/", resp -> ctx.fail());
+    req.end(Buffer.buffer(new byte[1024]));
+    closeLatch.awaitSuccess(10000);
+    HttpConnection conn = req.connection();
+    conn.close();
   }
 
   @Test

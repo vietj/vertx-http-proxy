@@ -40,13 +40,14 @@ class Router {
   private class Request implements ProxyRequest {
 
     private final List<BackendProvider> backends;
-    private final HttpServerRequest frontRequest;
-    private final HttpServerResponse frontResponse;
+    private HttpServerRequest frontRequest;
+    private HttpServerResponse frontResponse;
     private HttpClientRequest backRequest;
     private HttpClientResponse backResponse;
+    private boolean backReset;
     private Pump requestPump;
     private Pump responsePump;
-    private boolean closed;
+    private boolean clientEnded;
     private int index;
 
     public Request(HttpServerRequest frontRequest, List<BackendProvider> backends) {
@@ -57,31 +58,26 @@ class Router {
     }
 
     private void resetClient() {
-      if (!closed) {
-        closed = true;
+      if (!clientEnded) {
+        clientEnded = true;
         if (requestPump != null) {
           requestPump.stop();
+          responsePump = null;
         }
         if (responsePump != null) {
           responsePump.stop();
+          responsePump = null;
         }
         frontRequest.response().setStatusCode(502).end();
         frontRequest.connection().close();
       }
     }
 
-    private void resetBackend() {
-      if (!closed) {
-        closed = true;
-        requestPump.stop();
-        if (responsePump != null) {
-          responsePump.start();
-        }
-        backRequest.reset();
+    private void handle(HttpClientResponse response) {
+      if (frontRequest == null || frontResponse == null) {
+        return;
       }
-    }
 
-    void handle(HttpClientResponse response) {
       backResponse = response;
       frontResponse.setStatusCode(response.statusCode());
       frontResponse.setStatusMessage(response.statusMessage());
@@ -169,7 +165,17 @@ class Router {
         resetClient();
       });
       frontRequest.response().closeHandler(err -> {
-        resetBackend();
+        frontRequest = null;
+        frontResponse = null;
+        if (requestPump != null) {
+          requestPump.stop();
+          requestPump = null;
+        }
+        if (responsePump != null) {
+          responsePump.stop();
+          responsePump = null;
+        }
+        backRequest.reset();
       });
       frontRequest.resume();
       requestPump.start();

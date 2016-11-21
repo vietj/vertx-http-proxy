@@ -47,7 +47,11 @@ public abstract class HttpTest extends ProxyTestBase {
   }
 
   private BackendProvider startHttpBackend(TestContext ctx, int port, Handler<HttpServerRequest> handler) {
-    HttpServer backendServer = vertx.createHttpServer(new HttpServerOptions().setPort(port).setHost("localhost"));
+    return startHttpBackend(ctx, new HttpServerOptions().setPort(port).setHost("localhost"), handler);
+  }
+
+  private BackendProvider startHttpBackend(TestContext ctx, HttpServerOptions options, Handler<HttpServerRequest> handler) {
+    HttpServer backendServer = vertx.createHttpServer(options);
     backendServer.requestHandler(handler);
     Async async = ctx.async();
     backendServer.listen(ctx.asyncAssertSuccess(s -> async.complete()));
@@ -55,7 +59,7 @@ public abstract class HttpTest extends ProxyTestBase {
     return new BackendProvider() {
       @Override
       public void handle(ProxyRequest request) {
-        request.handle(() -> new SocketAddressImpl(port, "localhost"));
+        request.handle(() -> new SocketAddressImpl(options.getPort(), "localhost"));
       }
     };
   }
@@ -328,5 +332,27 @@ public abstract class HttpTest extends ProxyTestBase {
       });
       so.write("GET /somepath http/1.1\r\n\r\n");
     }));
+  }
+
+  @Test
+  public void testHandleLongInitialLength(TestContext ctx) {
+    options.getServerOptions().setMaxInitialLineLength(10000);
+    Async latch = ctx.async();
+    Random random = new Random();
+    StringBuilder uri = new StringBuilder("/");
+    int len = 6000;
+    for (int i = 0;i < len;i++) {
+      uri.append((char)('A' + random.nextInt(26)));
+    }
+    BackendProvider backend = startHttpBackend(ctx, new HttpServerOptions().setPort(8081).setMaxInitialLineLength(10000), req -> {
+      ctx.assertEquals(uri.toString(), req.uri());
+      req.response().end();
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    client.getNow(8080, "localhost", "" + uri, resp -> {
+      ctx.assertEquals(200, resp.statusCode());
+      latch.complete();
+    });
   }
 }

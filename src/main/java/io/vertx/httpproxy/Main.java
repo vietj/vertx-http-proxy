@@ -40,6 +40,7 @@ public class Main {
     };
     HttpProxyOptions options = new HttpProxyOptions();
     options.getServerOptions().setPort(port);
+    options.getServerOptions().setMaxInitialLineLength(10000);
     HttpProxy proxy = HttpProxy.createProxy(vertx, options);
     proxy.addBackend(request -> request.handle(backend));
 //    backend.start(ar -> {}); // Should be done by proxy listen

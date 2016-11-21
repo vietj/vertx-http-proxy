@@ -10,6 +10,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetServer;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.impl.SocketAddressImpl;
@@ -311,5 +312,22 @@ public abstract class HttpTest extends ProxyTestBase {
         latch.complete();
       });
     });
+  }
+
+  @Test
+  public void testIllegalClientHttpVersion(TestContext ctx) {
+    BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
+      ctx.fail();
+    });
+    startProxy(ctx, backend);
+    NetClient client = vertx.createNetClient();
+    client.connect(8080, "localhost", ctx.asyncAssertSuccess(so -> {
+      Buffer resp = Buffer.buffer();
+      so.handler(resp::appendBuffer);
+      so.closeHandler(v -> {
+        ctx.assertTrue(resp.toString().startsWith("HTTP/1.1 501 Not Implemented\r\n"));
+      });
+      so.write("GET /somepath http/1.1\r\n\r\n");
+    }));
   }
 }

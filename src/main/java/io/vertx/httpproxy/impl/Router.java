@@ -185,6 +185,14 @@ class Router {
 
     @Override
     public void next() {
+      if (index == 0) {
+        try {
+          frontRequest.version();
+        } catch (IllegalStateException e) {
+          // Sends 501
+          return;
+        }
+      }
       if (index < backends.size()) {
         BackendProvider backend = backends.get(index++);
         backend.handle(this);

@@ -14,11 +14,13 @@ import org.junit.runner.RunWith;
 @RunWith(VertxUnitRunner.class)
 public class ProxyTestBase {
 
-  protected HttpProxyOptions options = new HttpProxyOptions().setServerOptions(new HttpServerOptions().setPort(8080).setHost("localhost"));
+  protected HttpProxyOptions options;
+
   protected Vertx vertx;
 
   @Before
   public void setUp() {
+    options = new HttpProxyOptions().setServerOptions(new HttpServerOptions().setPort(8080).setHost("localhost"));
     vertx = Vertx.vertx();
   }
 

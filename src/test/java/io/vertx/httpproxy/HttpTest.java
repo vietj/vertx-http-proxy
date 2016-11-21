@@ -20,7 +20,6 @@ import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
 
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,12 +31,12 @@ public abstract class HttpTest extends ProxyTestBase {
   protected boolean keepAlive = true;
   protected boolean pipelining = true;
 
-  protected HttpClientOptions createProxyClientOptions() {
-    return new HttpClientOptions().setKeepAlive(keepAlive).setPipelining(pipelining);
+  protected HttpClientOptions configProxyClientOptions(HttpClientOptions options) {
+    return options.setKeepAlive(keepAlive).setPipelining(pipelining);
   }
 
   private HttpProxy startProxy(TestContext ctx, BackendProvider... backends) {
-    HttpProxy proxy = HttpProxy.createProxy(vertx, options.setClientOptions(createProxyClientOptions()));
+    HttpProxy proxy = HttpProxy.createProxy(vertx, options.setClientOptions(configProxyClientOptions(new HttpClientOptions())));
     for (BackendProvider backend : backends) {
       proxy.addBackend(backend);
     }

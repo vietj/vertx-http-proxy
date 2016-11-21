@@ -29,7 +29,7 @@
   <artifactId>vertx-reverse-proxy</artifactId>
   <version>3.4.0-SNAPSHOT</version>
 
-  <name>Vert.x Gateway</name>
+  <name>Vert.x Http Proxy</name>
 
   <properties>
     <stack.version>3.4.0-SNAPSHOT</stack.version>

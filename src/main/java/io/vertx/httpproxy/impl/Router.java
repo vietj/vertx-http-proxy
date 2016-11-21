@@ -127,6 +127,8 @@ class Router {
       response.headers().forEach(header -> {
         if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning")) {
           // Skip
+        } else if (header.getKey().equalsIgnoreCase("transfer-encoding") && header.getValue().equals("chunked")) {
+          frontResponse.setChunked(true);
         } else {
           frontResponse.headers().add(header.getKey(), header.getValue());
         }

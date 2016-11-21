@@ -9,6 +9,7 @@ import io.vertx.core.http.HttpConnection;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.net.NetServer;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.impl.SocketAddressImpl;
@@ -268,6 +269,47 @@ public abstract class HttpTest extends ProxyTestBase {
     client.getNow(8080, "localhost", "/", resp -> {
       ctx.assertEquals(expected, resp.getHeader("date"));
       latch.complete();
+    });
+  }
+
+  @Test
+  public void testChunkedTransferEncoding(TestContext ctx) {
+    int num = 50;
+    Async latch = ctx.async();
+    BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
+      HttpServerResponse resp = req.response();
+      resp.setChunked(true);
+      AtomicInteger count = new AtomicInteger(0);
+      vertx.setPeriodic(1, id -> {
+        int val = count.getAndIncrement();
+        if (val < num) {
+          resp.write("chunk-" + val);
+        } else {
+          vertx.cancelTimer(id);
+          resp.end();
+        }
+      });
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0;i < num;i++) {
+      sb.append("chunk-").append(i);
+    }
+    client.getNow(8080, "localhost", "/", resp -> {
+      ctx.assertEquals("chunked", resp.getHeader("transfer-encoding"));
+      resp.handler(buff -> {
+        String part = buff.toString();
+        if (sb.indexOf(part) == 0) {
+          sb.delete(0, part.length());
+        } else {
+          ctx.fail();
+        }
+      });
+      resp.endHandler(v -> {
+        ctx.assertEquals("", sb.toString());
+        latch.complete();
+      });
     });
   }
 }

@@ -3,6 +3,7 @@ package io.vertx.httpproxy;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpConnection;
 import io.vertx.core.http.HttpServer;
@@ -24,10 +25,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-public class HttpTest extends ProxyTestBase {
+public abstract class HttpTest extends ProxyTestBase {
+
+  protected boolean keepAlive = true;
+  protected boolean pipelining = true;
+
+  protected HttpClientOptions createProxyClientOptions() {
+    return new HttpClientOptions().setKeepAlive(keepAlive).setPipelining(pipelining);
+  }
 
   private HttpProxy startProxy(TestContext ctx, BackendProvider... backends) {
-    HttpProxy proxy = HttpProxy.createProxy(vertx, options);
+    HttpProxy proxy = HttpProxy.createProxy(vertx, options.setClientOptions(createProxyClientOptions()));
     for (BackendProvider backend : backends) {
       proxy.addBackend(backend);
     }

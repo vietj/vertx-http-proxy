@@ -29,8 +29,9 @@ public class HttpProxyOptions {
     return clientOptions;
   }
 
-  public void setClientOptions(HttpClientOptions clientOptions) {
+  public HttpProxyOptions setClientOptions(HttpClientOptions clientOptions) {
     this.clientOptions = clientOptions;
+    return this;
   }
 
   public HttpServerOptions getServerOptions() {

@@ -6,6 +6,7 @@ import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.http.HttpVersion;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.Pump;
 import io.vertx.httpproxy.backend.Backend;
@@ -125,20 +126,36 @@ class Router {
 
       // Handle other headers
       response.headers().forEach(header -> {
-        if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning")) {
+        if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning") || header.getKey().equalsIgnoreCase("transfer-encoding")) {
           // Skip
-        } else if (header.getKey().equalsIgnoreCase("transfer-encoding") && header.getValue().equals("chunked")) {
-          frontResponse.setChunked(true);
         } else {
           frontResponse.headers().add(header.getKey(), header.getValue());
         }
       });
 
-      responsePump = Pump.pump(response, frontResponse);
-      responsePump.start();
-      response.endHandler(v -> {
-        frontResponse.end();
-      });
+      //
+      boolean chunked = "chunked".equals(response.headers().get("transfer-encoding"));
+      if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
+        frontResponse.setChunked(true);
+        responsePump = Pump.pump(response, frontResponse);
+        responsePump.start();
+        response.endHandler(v -> {
+          frontResponse.end();
+        });
+      } else {
+        String contentLength = response.getHeader("content-length");
+        if (contentLength != null) {
+          responsePump = Pump.pump(response, frontResponse);
+          responsePump.start();
+          response.endHandler(v -> {
+            frontResponse.end();
+          });
+        } else {
+          response.bodyHandler(body -> {
+            frontResponse.end(body);
+          });
+        }
+      }
     }
 
     @Override

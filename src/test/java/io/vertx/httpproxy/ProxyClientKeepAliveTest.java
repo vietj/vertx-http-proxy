@@ -1,7 +1,5 @@
 package io.vertx.httpproxy;
 
-import io.vertx.ext.unit.TestContext;
-
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */

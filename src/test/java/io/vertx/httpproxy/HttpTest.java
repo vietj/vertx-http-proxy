@@ -10,6 +10,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.http.HttpVersion;
 import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetServer;
 import io.vertx.core.net.NetSocket;
@@ -278,7 +279,16 @@ public abstract class HttpTest extends ProxyTestBase {
   }
 
   @Test
-  public void testChunkedTransferEncodingResponse(TestContext ctx) {
+  public void testChunkedTransferEncodingResponseToHttp1_1Client(TestContext ctx) {
+    checkChunkedTransferEncodingResponse(ctx, HttpVersion.HTTP_1_1);
+  }
+
+  @Test
+  public void testChunkedTransferEncodingResponseToHttp1_0Client(TestContext ctx) {
+    checkChunkedTransferEncodingResponse(ctx, HttpVersion.HTTP_1_0);
+  }
+
+  private void checkChunkedTransferEncodingResponse(TestContext ctx, HttpVersion version) {
     int num = 50;
     Async latch = ctx.async();
     BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
@@ -287,13 +297,19 @@ public abstract class HttpTest extends ProxyTestBase {
       streamChunkedBody(resp, num);
     });
     startProxy(ctx, backend);
-    HttpClient client = vertx.createHttpClient();
+    HttpClient client = vertx.createHttpClient(new HttpClientOptions().setProtocolVersion(version));
     StringBuilder sb = new StringBuilder();
     for (int i = 0;i < num;i++) {
       sb.append("chunk-").append(i);
     }
     client.getNow(8080, "localhost", "/", resp -> {
-      ctx.assertEquals("chunked", resp.getHeader("transfer-encoding"));
+      if (version == HttpVersion.HTTP_1_1) {
+        ctx.assertEquals("chunked", resp.getHeader("transfer-encoding"));
+        ctx.assertEquals(null, resp.getHeader("content-length"));
+      } else {
+        ctx.assertEquals(null, resp.getHeader("transfer-encoding"));
+        ctx.assertEquals("" + sb.length(), resp.getHeader("content-length"));
+      }
       resp.handler(buff -> {
         String part = buff.toString();
         if (sb.indexOf(part) == 0) {

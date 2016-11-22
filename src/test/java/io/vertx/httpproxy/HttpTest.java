@@ -22,6 +22,7 @@ import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
 
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -207,6 +208,33 @@ public abstract class HttpTest extends ProxyTestBase {
     closeLatch.awaitSuccess(10000);
     HttpConnection conn = req.connection();
     conn.close();
+  }
+
+  @Test
+  public void testBackendCloseResponseWithOnGoingRequest(TestContext ctx) {
+    BackendProvider backend = startTcpBackend(ctx, 8081, so -> {
+      Buffer body = Buffer.buffer();
+      so.handler(buff -> {
+        body.appendBuffer(buff);
+        if (buff.toString().contains("\r\n\r\n")) {
+          so.write(
+              "HTTP/1.1 200 OK\r\n" +
+              "content-length: 0\r\n" +
+              "\r\n");
+          so.close();
+        }
+      });
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    HttpClientRequest req = client.post(8080, "localhost", "/");
+    Async async = ctx.async();
+    req.handler(resp -> {
+      ctx.assertEquals(200, resp.statusCode());
+      async.complete();
+    });
+    req.putHeader("Content-Length", "2048");
+    req.write(Buffer.buffer(new byte[1024]));
   }
 
   @Test

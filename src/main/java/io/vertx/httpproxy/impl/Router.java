@@ -154,7 +154,11 @@ class Router {
 
       // Set headers, don't copy host, as HttpClient will set it
       frontRequest.headers().forEach(header -> {
-        if (!header.getKey().equalsIgnoreCase("host")) {
+        if (header.getKey().equalsIgnoreCase("host")) {
+          //
+        } else if (header.getKey().equalsIgnoreCase("transfer-encoding") && header.getValue().equals("chunked")) {
+          backRequest.setChunked(true);
+        } else {
           backRequest.putHeader(header.getKey(), header.getValue());
         }
       });

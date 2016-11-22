@@ -14,6 +14,7 @@ import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetServer;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.impl.SocketAddressImpl;
+import io.vertx.core.streams.WriteStream;
 import io.vertx.httpproxy.backend.BackendProvider;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -277,22 +278,13 @@ public abstract class HttpTest extends ProxyTestBase {
   }
 
   @Test
-  public void testChunkedTransferEncoding(TestContext ctx) {
+  public void testChunkedTransferEncodingResponse(TestContext ctx) {
     int num = 50;
     Async latch = ctx.async();
     BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
       HttpServerResponse resp = req.response();
       resp.setChunked(true);
-      AtomicInteger count = new AtomicInteger(0);
-      vertx.setPeriodic(1, id -> {
-        int val = count.getAndIncrement();
-        if (val < num) {
-          resp.write("chunk-" + val);
-        } else {
-          vertx.cancelTimer(id);
-          resp.end();
-        }
-      });
+      streamChunkedBody(resp, num);
     });
     startProxy(ctx, backend);
     HttpClient client = vertx.createHttpClient();
@@ -315,6 +307,38 @@ public abstract class HttpTest extends ProxyTestBase {
         latch.complete();
       });
     });
+  }
+
+  @Test
+  public void testChunkedTransferEncodingRequest(TestContext ctx) {
+    int num = 50;
+    Async latch = ctx.async();
+    BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0;i < num;i++) {
+        sb.append("chunk-").append(i);
+      }
+      ctx.assertEquals("chunked", req.getHeader("transfer-encoding"));
+      req.handler(buff -> {
+        String part = buff.toString();
+        if (sb.indexOf(part) == 0) {
+          sb.delete(0, part.length());
+        } else {
+          ctx.fail();
+        }
+      });
+      req.endHandler(v -> {
+        ctx.assertEquals("", sb.toString());
+        latch.complete();
+      });
+      req.response().end();
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
+    });
+    req.setChunked(true);
+    streamChunkedBody(req, 50);
   }
 
   @Test
@@ -353,6 +377,19 @@ public abstract class HttpTest extends ProxyTestBase {
     client.getNow(8080, "localhost", "" + uri, resp -> {
       ctx.assertEquals(200, resp.statusCode());
       latch.complete();
+    });
+  }
+
+  private void streamChunkedBody(WriteStream<Buffer> stream, int num) {
+    AtomicInteger count = new AtomicInteger(0);
+    vertx.setPeriodic(1, id -> {
+      int val = count.getAndIncrement();
+      if (val < num) {
+        stream.write(Buffer.buffer("chunk-" + val));
+      } else {
+        vertx.cancelTimer(id);
+        stream.end();
+      }
     });
   }
 }

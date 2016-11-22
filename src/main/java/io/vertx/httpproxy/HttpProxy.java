@@ -5,6 +5,7 @@ import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.httpproxy.backend.BackendProvider;
 import io.vertx.httpproxy.impl.HttpProxyImpl;
 
@@ -21,6 +22,9 @@ public interface HttpProxy {
   static HttpProxy createProxy(Vertx vertx, HttpProxyOptions options) {
     return new HttpProxyImpl(vertx, options);
   }
+
+  @Fluent
+  HttpProxy beginRequestHandler(Handler<HttpServerRequest> handler);
 
   @Fluent
   HttpProxy addBackend(BackendProvider client);

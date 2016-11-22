@@ -44,6 +44,12 @@ public class Main {
     HttpProxy proxy = HttpProxy.createProxy(vertx, options);
     proxy.addBackend(request -> request.handle(backend));
 //    backend.start(ar -> {}); // Should be done by proxy listen
+
+    proxy.beginRequestHandler(req -> {
+      System.out.println("------------------------------------------");
+      System.out.println(req.path());
+    });
+
     proxy.listen(ar -> {
       if (ar.succeeded()) {
         System.out.println("Proxy server started on " + port);

@@ -1,5 +1,6 @@
 package io.vertx.httpproxy.impl;
 
+import io.vertx.core.Handler;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
@@ -25,15 +26,20 @@ class Router {
 
   final HttpClient client;
   final HttpServer server;
+  final Handler<HttpServerRequest> beginRequestHandler;
   final List<BackendProvider> backends;
 
-  public Router(HttpClient client, HttpServer server, List<BackendProvider> backends) {
+  public Router(HttpClient client, HttpServer server, Handler<HttpServerRequest> beginRequestHandler, List<BackendProvider> backends) {
     this.server = server;
+    this.beginRequestHandler = beginRequestHandler;
     this.backends = backends;
     this.client = client;
   }
 
   public void handle(HttpServerRequest req) {
+    if (beginRequestHandler != null) {
+      beginRequestHandler.handle(req);
+    }
     Request request = new Request(req, backends);
     request.next();
   }

@@ -1,5 +1,7 @@
 package io.vertx.httpproxy;
 
+import io.netty.util.internal.logging.InternalLoggerFactory;
+import io.netty.util.internal.logging.Slf4JLoggerFactory;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
@@ -39,7 +41,7 @@ public abstract class HttpTest extends ProxyTestBase {
   }
 
   private HttpProxy startProxy(TestContext ctx, BackendProvider... backends) {
-    HttpProxy proxy = HttpProxy.createProxy(vertx, options.setClientOptions(configProxyClientOptions(new HttpClientOptions())));
+    HttpProxy proxy = HttpProxy.createProxy(vertx, options.setClientOptions(configProxyClientOptions(options.getClientOptions())));
     for (BackendProvider backend : backends) {
       proxy.addBackend(backend);
     }
@@ -406,14 +408,9 @@ public abstract class HttpTest extends ProxyTestBase {
   public void testHandleLongInitialLength(TestContext ctx) {
     options.getServerOptions().setMaxInitialLineLength(10000);
     Async latch = ctx.async();
-    Random random = new Random();
-    StringBuilder uri = new StringBuilder("/");
-    int len = 6000;
-    for (int i = 0;i < len;i++) {
-      uri.append((char)('A' + random.nextInt(26)));
-    }
+    String uri = "/" + randomAlphaString(5999);
     BackendProvider backend = startHttpBackend(ctx, new HttpServerOptions().setPort(8081).setMaxInitialLineLength(10000), req -> {
-      ctx.assertEquals(uri.toString(), req.uri());
+      ctx.assertEquals(uri, req.uri());
       req.response().end();
     });
     startProxy(ctx, backend);
@@ -421,6 +418,40 @@ public abstract class HttpTest extends ProxyTestBase {
     client.getNow(8080, "localhost", "" + uri, resp -> {
       ctx.assertEquals(200, resp.statusCode());
       latch.complete();
+    });
+  }
+
+  @Test
+  public void testLargeChunkExtValue(TestContext ctx) {
+    String s = "" + randomAlphaString(4096);
+    Async latch = ctx.async();
+    BackendProvider backend = startTcpBackend(ctx, 8081, so -> {
+      Buffer body = Buffer.buffer();
+      so.handler(buff -> {
+        body.appendBuffer(buff);
+        if (body.toString().endsWith("\r\n\r\n")) {
+          so.write("" +
+              "HTTP/1.1 200 OK\r\n" +
+              "Transfer-Encoding: chunked\r\n" +
+              "connection: close\r\n" +
+              "\r\n" +
+              "A; name=\"" + s + "\"\r\n" +
+              "0123456789\r\n" +
+              "0\r\n" +
+              "\r\n"
+          );
+        }
+      });
+    });
+    options.getClientOptions().setMaxInitialLineLength(5000);
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient(/*new HttpClientOptions().setProtocolVersion(HttpVersion.HTTP_1_0)*/);
+    client.getNow(8080, "localhost", "/somepath", resp -> {
+      ctx.assertEquals(200, resp.statusCode());
+      resp.bodyHandler(body -> {
+        ctx.assertEquals("0123456789", body.toString());
+        latch.complete();
+      });
     });
   }
 
@@ -435,5 +466,14 @@ public abstract class HttpTest extends ProxyTestBase {
         stream.end();
       }
     });
+  }
+
+  private StringBuilder randomAlphaString(int len) {
+    Random random = new Random();
+    StringBuilder uri = new StringBuilder();
+    for (int i = 0;i < len;i++) {
+      uri.append((char)('A' + random.nextInt(26)));
+    }
+    return uri;
   }
 }

@@ -3,6 +3,9 @@ package io.vertx.httpproxy;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import io.netty.channel.unix.Socket;
+import io.netty.util.internal.logging.InternalLoggerFactory;
+import io.netty.util.internal.logging.Log4JLoggerFactory;
+import io.netty.util.internal.logging.Slf4JLoggerFactory;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.net.SocketAddress;
@@ -30,8 +33,8 @@ public class Main {
   }
 
   public void run() {
+//    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE);
     Vertx vertx = Vertx.vertx();
-//    DockerProvider backend = new DockerProvider(vertx);
     Backend backend = new Backend() {
       @Override
       public SocketAddress next() {
@@ -41,9 +44,11 @@ public class Main {
     HttpProxyOptions options = new HttpProxyOptions();
     options.getServerOptions().setPort(port);
     options.getServerOptions().setMaxInitialLineLength(10000);
+    options.getClientOptions().setMaxInitialLineLength(10000);
+//    options.getServerOptions().setLogActivity(true);
+//    options.getClientOptions().setLogActivity(true);
     HttpProxy proxy = HttpProxy.createProxy(vertx, options);
     proxy.addBackend(request -> request.handle(backend));
-//    backend.start(ar -> {}); // Should be done by proxy listen
 
     proxy.beginRequestHandler(req -> {
       System.out.println("------------------------------------------");

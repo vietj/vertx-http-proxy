@@ -386,6 +386,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
 
   @Test
   public void testIllegalClientHttpVersion(TestContext ctx) {
+    Async latch = ctx.async();
     BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
       ctx.fail();
     });
@@ -396,6 +397,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       so.handler(resp::appendBuffer);
       so.closeHandler(v -> {
         ctx.assertTrue(resp.toString().startsWith("HTTP/1.1 501 Not Implemented\r\n"));
+        latch.complete();
       });
       so.write("GET /somepath http/1.1\r\n\r\n");
     }));

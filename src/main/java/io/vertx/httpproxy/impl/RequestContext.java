@@ -12,9 +12,11 @@ import io.vertx.httpproxy.backend.Backend;
 import io.vertx.httpproxy.backend.BackendProvider;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -140,6 +142,8 @@ class RequestContext implements ProxyRequest {
     }
   }
 
+  private static final List<String> CHUNKED_LIST = Collections.singletonList("chunked");
+
   @Override
   public HttpServerRequest clientRequest() {
     return frontRequest;
@@ -152,15 +156,21 @@ class RequestContext implements ProxyRequest {
     backRequest.handler(this::handle);
 
     // Set headers, don't copy host, as HttpClient will set it
-    frontRequest.headers().forEach(header -> {
+    for (Map.Entry<String, String> header : frontRequest.headers()) {
       if (header.getKey().equalsIgnoreCase("host")) {
         //
-      } else if (header.getKey().equalsIgnoreCase("transfer-encoding") && header.getValue().equals("chunked")) {
-        backRequest.setChunked(true);
+      } else if (header.getKey().equalsIgnoreCase("transfer-encoding")) {
+        if (header.getValue().equals("chunked")) {
+          backRequest.setChunked(true);
+        } else {
+          frontRequest.response().setStatusCode(400).end();
+          return;
+        }
       } else {
         backRequest.putHeader(header.getKey(), header.getValue());
       }
-    });
+    }
+
     frontRequest.endHandler(v -> {
       requestPump = null;
       backRequest.end();

@@ -454,6 +454,68 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
   }
 
+  @Test
+  public void testRequestIllegalTransferEncoding(TestContext ctx) throws Exception {
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+        "transfer-encoding: identity\r\n" +
+        "connection: close\r\n" +
+        "\r\n");
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+            "transfer-encoding: chunked, identity\r\n" +
+            "connection: close\r\n" +
+            "\r\n");
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+            "transfer-encoding: identity, chunked\r\n" +
+            "connection: close\r\n" +
+            "\r\n");
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+            "transfer-encoding: identity\r\n" +
+            "transfer-encoding: chunked\r\n" +
+            "connection: close\r\n" +
+            "\r\n");
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+            "transfer-encoding: chunked\r\n" +
+            "transfer-encoding: identity\r\n" +
+            "connection: close\r\n" +
+            "\r\n");
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+            "transfer-encoding: other, chunked\r\n" +
+            "connection: close\r\n" +
+            "\r\n");
+    checkBadRequest(ctx,
+        "POST /somepath HTTP/1.1\r\n" +
+            "transfer-encoding: other\r\n" +
+            "transfer-encoding: chunked\r\n" +
+            "connection: close\r\n" +
+            "\r\n");
+  }
+
+  private void checkBadRequest(TestContext ctx, String request) throws Exception {
+    BackendProvider backend = startHttpBackend(ctx, 8081, req -> {
+      ctx.fail();
+    });
+    Async latch = ctx.async();
+    startProxy(ctx, backend);
+    NetClient client = vertx.createNetClient();
+    client.connect(8080, "localhost", ctx.asyncAssertSuccess(so -> {
+      Buffer resp = Buffer.buffer();
+      so.handler(buff -> {
+        resp.appendBuffer(buff);
+        if (resp.toString().startsWith("HTTP/1.1 400 Bad Request\r\n")) {
+          latch.complete();
+        }
+      });
+      so.write(request);
+    }));
+    latch.awaitSuccess(10000);
+  }
+
   private void streamChunkedBody(WriteStream<Buffer> stream, int num) {
     AtomicInteger count = new AtomicInteger(0);
     vertx.setPeriodic(1, id -> {

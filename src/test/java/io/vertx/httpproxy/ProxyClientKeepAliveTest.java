@@ -516,6 +516,52 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     latch.awaitSuccess(10000);
   }
 
+  @Test
+  public void testResponseIllegalTransferEncoding(TestContext ctx) throws Exception {
+    checkBadResponse(ctx, "" +
+        "HTTP/1.1 200 OK\r\n" +
+        "Transfer-Encoding: other, chunked\r\n" +
+        "connection: close\r\n" +
+        "\r\n" +
+        "A\r\n" +
+        "0123456789\r\n" +
+        "0\r\n" +
+        "\r\n");
+    checkBadResponse(ctx, "" +
+        "HTTP/1.1 200 OK\r\n" +
+        "Transfer-Encoding: other\r\n" +
+        "Transfer-Encoding: chunked\r\n" +
+        "connection: close\r\n" +
+        "\r\n" +
+        "A\r\n" +
+        "0123456789\r\n" +
+        "0\r\n" +
+        "\r\n");
+  }
+
+  private void checkBadResponse(TestContext ctx, String response) throws Exception {
+    BackendProvider backend = startTcpBackend(ctx, 8081, so -> {
+      Buffer body = Buffer.buffer();
+      so.handler(buff -> {
+        body.appendBuffer(buff);
+        if (body.toString().endsWith("\r\n\r\n")) {
+          so.write(response);
+        }
+      });
+    });
+    Async latch = ctx.async();
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    client.getNow(8080, "localhost", "/somepath", resp -> {
+      ctx.assertEquals(501, resp.statusCode());
+      resp.bodyHandler(body -> {
+        ctx.assertEquals("", body.toString());
+        latch.complete();
+      });
+    });
+    latch.awaitSuccess(10000);
+  }
+
   private void streamChunkedBody(WriteStream<Buffer> stream, int num) {
     AtomicInteger count = new AtomicInteger(0);
     vertx.setPeriodic(1, id -> {

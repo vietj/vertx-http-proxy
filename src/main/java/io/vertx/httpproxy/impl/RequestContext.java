@@ -114,8 +114,17 @@ class RequestContext implements ProxyRequest {
       }
     });
 
-    //
-    boolean chunked = "chunked".equals(response.headers().get("transfer-encoding"));
+    // Determine chunked
+    boolean chunked = false;
+    for (String value : response.headers().getAll("transfer-encoding")) {
+      if (value.equals("chunked")) {
+        chunked = true;
+      } else {
+        frontResponse.setStatusCode(501).end();
+        return;
+      }
+    }
+
     if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
       frontResponse.setChunked(true);
       responsePump = Pump.pump(response, frontResponse);

@@ -5,7 +5,7 @@ import io.vertx.ext.unit.TestContext;
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
-public class ProxyClientNotPersistentTest extends HttpTest {
+public class ProxyClientNotPersistentTest extends ProxyClientKeepAliveTest {
 
   public ProxyClientNotPersistentTest() {
     keepAlive = false;

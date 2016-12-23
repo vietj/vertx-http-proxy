@@ -2,7 +2,13 @@
 
 A dynamic HTTP reverse proxy for microservices based on Vert.x , right now it can discover Docker containers on the same host.
 
-Usage : _package_ and then run the _fatjar_ :
+# License
+
+Eclipse Public License - Version 1.0 / Apache License - Version 2.0
+
+# Usage
+
+_package_ and then run the _fatjar_ :
 
 ````
 > mvn package

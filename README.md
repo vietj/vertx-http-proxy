@@ -1,6 +1,6 @@
 # Vert.x Http Proxy
 
-A dynamic HTTP reverse proxy for microservices based on Vert.x , right now it can discover Docker containers on the same host.
+A HTTP reverse proxy based on Vert.x, it aims to implement the reverse proxy logic and be reusable, so one does not need to care about the proxy logic and can focus rather on higher concerns.
 
 # License
 

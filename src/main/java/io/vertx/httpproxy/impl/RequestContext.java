@@ -2,6 +2,7 @@ package io.vertx.httpproxy.impl;
 
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
+import io.vertx.core.http.HttpConnection;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.http.HttpVersion;
@@ -30,6 +31,7 @@ class RequestContext implements ProxyRequest {
   private Pump requestPump;
   private Pump responsePump;
   private int index;
+  private boolean responseEnded;
 
   RequestContext(Router router, HttpServerRequest frontRequest, List<BackendProvider> backends) {
     this.router = router;
@@ -48,9 +50,13 @@ class RequestContext implements ProxyRequest {
         responsePump.stop();
         responsePump = null;
       }
-      frontRequest.response().setStatusCode(502).end();
-      frontRequest.connection().close();
+      HttpConnection conn = frontRequest.connection();
+      HttpServerResponse response = frontRequest.response();
       frontRequest = null;
+      response.setStatusCode(502).end();
+      if (conn != null) {
+        conn.close();
+      }
     }
   }
 
@@ -120,6 +126,7 @@ class RequestContext implements ProxyRequest {
       if (value.equals("chunked")) {
         chunked = true;
       } else {
+        frontRequest = null;
         frontResponse.setStatusCode(501).end();
         return;
       }
@@ -172,6 +179,7 @@ class RequestContext implements ProxyRequest {
         if (header.getValue().equals("chunked")) {
           backRequest.setChunked(true);
         } else {
+          responseEnded = true;
           frontRequest.response().setStatusCode(400).end();
           return;
         }
@@ -189,16 +197,18 @@ class RequestContext implements ProxyRequest {
       resetClient();
     });
     frontRequest.response().closeHandler(v -> {
-      frontRequest = null;
-      if (requestPump != null) {
-        requestPump.stop();
-        requestPump = null;
+      if (frontRequest != null) {
+        frontRequest = null;
+        if (requestPump != null) {
+          requestPump.stop();
+          requestPump = null;
+        }
+        if (responsePump != null) {
+          responsePump.stop();
+          responsePump = null;
+        }
+        backRequest.reset();
       }
-      if (responsePump != null) {
-        responsePump.stop();
-        responsePump = null;
-      }
-      backRequest.reset();
     });
     frontRequest.resume();
     requestPump.start();

@@ -381,7 +381,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
     });
     req.setChunked(true);
-    streamChunkedBody(req, 50);
+    streamChunkedBody(req, num);
   }
 
   @Test
@@ -564,7 +564,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
 
   private void streamChunkedBody(WriteStream<Buffer> stream, int num) {
     AtomicInteger count = new AtomicInteger(0);
-    vertx.setPeriodic(1, id -> {
+    vertx.setPeriodic(10, id -> {
       int val = count.getAndIncrement();
       if (val < num) {
         stream.write(Buffer.buffer("chunk-" + val));

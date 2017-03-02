@@ -196,8 +196,9 @@ class RequestContext implements ProxyRequest {
     backRequest.exceptionHandler(err -> {
       resetClient();
     });
-    frontRequest.response().closeHandler(v -> {
+    frontRequest.response().endHandler(v -> {
       if (frontRequest != null) {
+        // Abrupt close
         frontRequest = null;
         if (requestPump != null) {
           requestPump.stop();

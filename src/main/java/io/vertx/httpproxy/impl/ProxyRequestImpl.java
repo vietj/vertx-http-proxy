@@ -25,9 +25,9 @@ import java.util.Map;
  */
 public class ProxyRequestImpl implements ProxyRequest {
 
-  private static final Handler<AsyncResult<Void>> NOOP = ar -> {};
   private final HttpClient client;
   private SocketAddress target;
+
   private HttpServerRequest frontRequest;
   private HttpClientRequest backRequest;
   private Pump requestPump;
@@ -50,11 +50,6 @@ public class ProxyRequestImpl implements ProxyRequest {
   }
 
   @Override
-  public void handle() {
-    handle(NOOP);
-  }
-
-  @Override
   public void handle(Handler<AsyncResult<Void>> completionHandler) {
 
     // Sanity check
@@ -68,7 +63,7 @@ public class ProxyRequestImpl implements ProxyRequest {
 
     //
     backRequest = client.request(frontRequest.method(), target.port(), target.host(), frontRequest.uri());
-    backRequest.handler(this::handle);
+    backRequest.handler(resp -> handle(resp, completionHandler));
 
     // Set headers, don't copy host, as HttpClient will set it
     for (Map.Entry<String, String> header : frontRequest.headers()) {
@@ -96,37 +91,43 @@ public class ProxyRequestImpl implements ProxyRequest {
       completionHandler.handle(Future.failedFuture(err));
     });
     frontRequest.response().endHandler(v -> {
-      if (frontRequest != null) {
-        // Abrupt close
-        frontRequest = null;
-        if (requestPump != null) {
-          requestPump.stop();
-          requestPump = null;
-        }
-        if (responsePump != null) {
-          responsePump.stop();
-          responsePump = null;
-        }
+      if (stop() != null) {
         backRequest.reset();
+        completionHandler.handle(Future.failedFuture("no-msg"));
       }
     });
     frontRequest.resume();
     requestPump.start();
   }
 
-  private void resetClient() {
-    if (frontRequest != null) {
+  /**
+   * Stop the proxy request
+   *
+   * @return the front request if stopped / {@code null} means nothing happened
+   */
+  private HttpServerRequest stop() {
+    HttpServerRequest request = frontRequest;
+    if (request != null) {
+      // Abrupt close
+      frontRequest = null;
       if (requestPump != null) {
         requestPump.stop();
-        responsePump = null;
+        requestPump = null;
       }
       if (responsePump != null) {
         responsePump.stop();
         responsePump = null;
       }
-      HttpConnection conn = frontRequest.connection();
-      HttpServerResponse response = frontRequest.response();
-      frontRequest = null;
+      return request;
+    }
+    return null;
+  }
+
+  private void resetClient() {
+    HttpServerRequest request = stop();
+    if (request != null) {
+      HttpConnection conn = request.connection();
+      HttpServerResponse response = request.response();
       response.setStatusCode(502).end();
       if (conn != null) {
         conn.close();
@@ -134,21 +135,21 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
   }
 
-  private void handle(HttpClientResponse response) {
+  private void handle(HttpClientResponse backResponse, Handler<AsyncResult<Void>> completionHandler) {
     if (frontRequest == null) {
       return;
     }
 
     HttpServerResponse frontResponse = frontRequest.response();
 
-    frontResponse.setStatusCode(response.statusCode());
-    frontResponse.setStatusMessage(response.statusMessage());
+    frontResponse.setStatusCode(backResponse.statusCode());
+    frontResponse.setStatusMessage(backResponse.statusMessage());
 
     // Date header
-    String dateHeader = response.headers().get("date");
+    String dateHeader = backResponse.headers().get("date");
     Date date = null;
     if (dateHeader == null) {
-      List<String> warningHeaders = response.headers().getAll("warning");
+      List<String> warningHeaders = backResponse.headers().getAll("warning");
       if (warningHeaders.size() > 0) {
         for (String warningHeader : warningHeaders) {
           date = ParseUtils.parseWarningHeaderDate(warningHeader);
@@ -170,7 +171,7 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
 
     // Suppress incorrect warning header
-    List<String> warningHeaders = response.headers().getAll("warning");
+    List<String> warningHeaders = backResponse.headers().getAll("warning");
     if (warningHeaders.size() > 0) {
       warningHeaders = new ArrayList<>(warningHeaders);
       Date dateInstant = ParseUtils.parseDateHeaderDate(dateHeader);
@@ -186,7 +187,7 @@ public class ProxyRequestImpl implements ProxyRequest {
     frontResponse.putHeader("warning", warningHeaders);
 
     // Handle other headers
-    response.headers().forEach(header -> {
+    backResponse.headers().forEach(header -> {
       if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning") || header.getKey().equalsIgnoreCase("transfer-encoding")) {
         // Skip
       } else {
@@ -196,37 +197,49 @@ public class ProxyRequestImpl implements ProxyRequest {
 
     // Determine chunked
     boolean chunked = false;
-    for (String value : response.headers().getAll("transfer-encoding")) {
+    for (String value : backResponse.headers().getAll("transfer-encoding")) {
       if (value.equals("chunked")) {
         chunked = true;
       } else {
         frontRequest = null;
         frontResponse.setStatusCode(501).end();
+        completionHandler.handle(Future.succeededFuture());
         return;
       }
     }
 
+    backResponse.exceptionHandler(err -> {
+      HttpServerRequest request = stop();
+      if (request != null) {
+        request.response().close();
+        completionHandler.handle(Future.failedFuture(err));
+      }
+    });
+
     if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
       frontResponse.setChunked(true);
-      responsePump = Pump.pump(response, frontResponse);
+      responsePump = Pump.pump(backResponse, frontResponse);
       responsePump.start();
-      response.endHandler(v -> {
+      backResponse.endHandler(v -> {
         frontRequest = null;
         frontResponse.end();
+        completionHandler.handle(Future.succeededFuture());
       });
     } else {
-      String contentLength = response.getHeader("content-length");
+      String contentLength = backResponse.getHeader("content-length");
       if (contentLength != null) {
-        responsePump = Pump.pump(response, frontResponse);
+        responsePump = Pump.pump(backResponse, frontResponse);
         responsePump.start();
-        response.endHandler(v -> {
+        backResponse.endHandler(v -> {
           frontRequest = null;
           frontResponse.end();
+          completionHandler.handle(Future.succeededFuture());
         });
       } else {
-        response.bodyHandler(body -> {
+        backResponse.bodyHandler(body -> {
           frontRequest = null;
           frontResponse.end(body);
+          completionHandler.handle(Future.succeededFuture());
         });
       }
     }

@@ -1,0 +1,178 @@
+package io.vertx.httpproxy;
+
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Handler;
+import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientOptions;
+import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.http.HttpVersion;
+import io.vertx.core.net.NetClient;
+import io.vertx.core.net.NetSocket;
+import io.vertx.core.net.SocketAddress;
+import io.vertx.ext.unit.Async;
+import io.vertx.ext.unit.TestContext;
+import org.junit.Test;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
+ */
+public class ProxyRequestTest extends ProxyTestBase {
+
+  @Test
+  public void testProxyRequestIllegalHttpVersion(TestContext ctx) {
+    runHttpTest(ctx, req -> req.response().end("Hello World"), ctx.asyncAssertFailure());
+    NetClient client = vertx.createNetClient();
+    client.connect(8080, "localhost", ctx.asyncAssertSuccess(so -> {
+      so.write("GET /somepath http/1.1\r\n\r\n");
+    }));
+  }
+
+  @Test
+  public void testBackendResponse(TestContext ctx) {
+    runHttpTest(ctx, req -> req.response().end("Hello World"), ctx.asyncAssertSuccess());
+    Async async = ctx.async();
+    HttpClient httpClient = vertx.createHttpClient();
+    httpClient.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.endHandler(v -> async.complete());
+    });
+  }
+
+  @Test
+  public void testChunkedBackendResponse(TestContext ctx) {
+    testChunkedBackendResponse(ctx, HttpVersion.HTTP_1_1);
+  }
+
+  @Test
+  public void testChunkedBackendResponseToHttp1_0Client(TestContext ctx) {
+    testChunkedBackendResponse(ctx, HttpVersion.HTTP_1_0);
+  }
+
+  private void testChunkedBackendResponse(TestContext ctx, HttpVersion version) {
+    runHttpTest(ctx, req -> req.response().setChunked(true).end("Hello World"), ctx.asyncAssertSuccess());
+    Async async = ctx.async();
+    HttpClient httpClient = vertx.createHttpClient(new HttpClientOptions().setProtocolVersion(version));
+    httpClient.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.endHandler(v -> async.complete());
+    });
+  }
+
+  @Test
+  public void testIllegalTransferEncodingBackendResponse(TestContext ctx) {
+    runNetTest(ctx, req -> req.write("" +
+        "HTTP/1.1 200 OK\r\n" +
+        "transfer-encoding: identity\r\n" +
+        "connection: close\r\n" +
+        "\r\n"), ctx.asyncAssertSuccess());
+    Async async = ctx.async();
+    HttpClient httpClient = vertx.createHttpClient();
+    httpClient.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.endHandler(v -> async.complete());
+    });
+  }
+
+  @Test
+  public void testCloseBackendResponse(TestContext ctx) {
+    testCloseBackendResponse(ctx, false);
+  }
+
+  @Test
+  public void testCloseChunknedBackendResponse(TestContext ctx) {
+    testCloseBackendResponse(ctx, true);
+  }
+
+  private void testCloseBackendResponse(TestContext ctx, boolean chunked) {
+    CompletableFuture<Void> cont = new CompletableFuture<>();
+    runHttpTest(ctx, req -> {
+      HttpServerResponse resp = req.response();
+      if (chunked) {
+        resp.setChunked(true);
+      } else {
+        resp.putHeader("content-length", "10000");
+      }
+      resp.write("part");
+      cont.thenAccept(v -> {
+        resp.close();
+      });
+    }, ctx.asyncAssertFailure());
+    Async async = ctx.async();
+    HttpClient httpClient = vertx.createHttpClient();
+    httpClient.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.handler(buff -> {
+        cont.complete(null);
+      });
+      resp.exceptionHandler(v -> async.complete());
+    });
+  }
+
+  @Test
+  public void testCloseProxyRequest(TestContext ctx) throws Exception {
+    testCloseChunkedProxyRequest(ctx, false);
+  }
+
+  @Test
+  public void testCloseChunkedProxyRequest(TestContext ctx) throws Exception {
+    testCloseChunkedProxyRequest(ctx, true);
+  }
+
+  private void testCloseChunkedProxyRequest(TestContext ctx, boolean chunked) throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    runHttpTest(ctx, req -> {
+      req.handler(buff -> {
+        ctx.assertEquals("part", buff.toString());
+        latch.countDown();
+      });
+    }, ctx.asyncAssertFailure());
+    HttpClient httpClient = vertx.createHttpClient();
+    HttpClientRequest req = httpClient.get(8080, "localhost", "/somepath", resp -> {
+      ctx.fail();
+    });
+    if (chunked) {
+      req.setChunked(true);
+    } else {
+      req.putHeader("content-length", "10000");
+    }
+    req.write("part");
+    latch.await(10, TimeUnit.SECONDS);
+    req.connection().close();
+  }
+
+  private void runHttpTest(TestContext ctx,
+                           Handler<HttpServerRequest> backendHandler,
+                           Handler<AsyncResult<Void>> expect) {
+    Async async = ctx.async();
+    SocketAddress backend = startHttpBackend(ctx, 8081, backendHandler);
+    HttpClient client = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = ProxyRequest.reverse(client);
+      proxyReq.target(backend);
+      proxyReq.request(req);
+      proxyReq.handle(ar -> {
+        expect.handle(ar);
+        async.complete();
+      });
+    });
+  }
+
+  private void runNetTest(TestContext ctx,
+                       Handler<NetSocket> backendHandler,
+                       Handler<AsyncResult<Void>> expect) {
+    Async async = ctx.async();
+    SocketAddress backend = startNetBackend(ctx, 8081, backendHandler);
+    HttpClient client = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = ProxyRequest.reverse(client);
+      proxyReq.target(backend);
+      proxyReq.request(req);
+      proxyReq.handle(ar -> {
+        expect.handle(ar);
+        async.complete();
+      });
+    });
+  }
+}

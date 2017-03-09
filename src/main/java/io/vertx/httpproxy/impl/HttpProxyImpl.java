@@ -1,5 +1,7 @@
 package io.vertx.httpproxy.impl;
 
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Handler;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.SocketAddress;
@@ -10,6 +12,7 @@ import io.vertx.httpproxy.HttpProxy;
  */
 public class HttpProxyImpl implements HttpProxy {
 
+  private static final Handler<AsyncResult<Void>> NOOP = ar -> {};
   private final HttpClient client;
   private final SocketAddress target;
 
@@ -23,6 +26,6 @@ public class HttpProxyImpl implements HttpProxy {
     ProxyRequestImpl proxyRequest = new ProxyRequestImpl(client);
     proxyRequest.request(request);
     proxyRequest.target(target);
-    proxyRequest.handle();
+    proxyRequest.handle(NOOP);
   }
 }

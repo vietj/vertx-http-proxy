@@ -15,7 +15,7 @@ import io.vertx.httpproxy.impl.ProxyRequestImpl;
 @VertxGen
 public interface ProxyRequest {
 
-  static ProxyRequest create(HttpClient client) {
+  static ProxyRequest reverse(HttpClient client) {
     return new ProxyRequestImpl(client);
   }
 
@@ -25,9 +25,6 @@ public interface ProxyRequest {
   @Fluent
   ProxyRequest target(SocketAddress target);
 
-  void handle();
-
   void handle(Handler<AsyncResult<Void>> completionHandler);
-
 
 }

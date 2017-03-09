@@ -10,9 +10,6 @@ import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.net.impl.SocketAddressImpl;
-import io.vertx.httpproxy.backend.Backend;
-import io.vertx.httpproxy.backend.BackendProvider;
-import io.vertx.httpproxy.backend.docker.DockerProvider;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -34,6 +31,7 @@ public class Main {
 
   public void run() {
 //    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE);
+/*
     Vertx vertx = Vertx.vertx();
     Backend backend = new Backend() {
       @Override
@@ -62,5 +60,6 @@ public class Main {
         ar.cause().printStackTrace();
       }
     });
+*/
   }
 }

@@ -1,6 +1,7 @@
 package io.vertx.httpproxy;
 
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
@@ -14,13 +15,16 @@ import org.junit.runner.RunWith;
 @RunWith(VertxUnitRunner.class)
 public class ProxyTestBase {
 
-  protected HttpProxyOptions options;
+  protected HttpServerOptions proxyOptions;
+  protected HttpClientOptions clientOptions;
+
 
   protected Vertx vertx;
 
   @Before
   public void setUp() {
-    options = new HttpProxyOptions().setServerOptions(new HttpServerOptions().setPort(8080).setHost("localhost"));
+    proxyOptions = new HttpServerOptions().setPort(8080).setHost("localhost");
+    clientOptions = new HttpClientOptions();
     vertx = Vertx.vertx();
   }
 

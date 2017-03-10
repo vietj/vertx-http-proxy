@@ -2,6 +2,7 @@ package io.vertx.httpproxy;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
@@ -140,6 +141,38 @@ public class ProxyRequestTest extends ProxyTestBase {
     req.write("part");
     latch.await(10, TimeUnit.SECONDS);
     req.connection().close();
+  }
+
+  @Test
+  public void testLatency(TestContext ctx) throws Exception {
+    HttpClient client = vertx.createHttpClient();
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      HttpServerResponse resp = req.response();
+      req.bodyHandler(resp::end);
+    });
+    HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    Async async = ctx.async(2);
+    startHttpServer(ctx, proxyOptions, req -> {
+      req.pause();
+      vertx.setTimer(500, id1 -> {
+        ProxyRequest proxyReq = ProxyRequest.reverse(backendClient);
+        proxyReq.target(backend);
+        proxyReq.request(req);
+        proxyReq.send(ctx.asyncAssertSuccess(resp -> {
+          vertx.setTimer(500, id2 -> {
+            resp.send(ctx.asyncAssertSuccess(v -> async.countDown()));
+          });
+        }));
+      });
+    });
+    Buffer sent = Buffer.buffer("Hello world");
+    HttpClientRequest req = client.post(8080, "localhost", "/somepath", resp -> {
+      resp.bodyHandler(received -> {
+        ctx.assertEquals(sent, received);
+        async.countDown();
+      });
+    });
+    req.end(sent);
   }
 
   private void runHttpTest(TestContext ctx,

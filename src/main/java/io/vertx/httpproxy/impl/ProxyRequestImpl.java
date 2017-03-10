@@ -13,20 +13,23 @@ import io.vertx.core.http.HttpVersion;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.Pump;
 import io.vertx.httpproxy.ProxyRequest;
+import io.vertx.httpproxy.ProxyResponse;
 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
 public class ProxyRequestImpl implements ProxyRequest {
 
-  private final HttpClient client;
   private SocketAddress target;
+
+  private Function<HttpServerRequest, HttpClientRequest> backendRequestProvider;
 
   private HttpServerRequest frontRequest;
   private HttpClientRequest backRequest;
@@ -34,7 +37,13 @@ public class ProxyRequestImpl implements ProxyRequest {
   private Pump responsePump;
 
   public ProxyRequestImpl(HttpClient client) {
-    this.client = client;
+    backendRequestProvider(req -> client.request(frontRequest.method(), target.port(), target.host(), frontRequest.uri()));
+  }
+
+  @Override
+  public ProxyRequest backendRequestProvider(Function<HttpServerRequest, HttpClientRequest> provider) {
+    backendRequestProvider = provider;
+    return this;
   }
 
   @Override
@@ -51,6 +60,18 @@ public class ProxyRequestImpl implements ProxyRequest {
 
   @Override
   public void handle(Handler<AsyncResult<Void>> completionHandler) {
+    send(ar -> {
+      if (ar.succeeded()) {
+        ProxyResponse resp = ar.result();
+        resp.send(completionHandler);
+      } else {
+        completionHandler.handle(ar.mapEmpty());
+      }
+    });
+  }
+
+  @Override
+  public void send(Handler<AsyncResult<ProxyResponse>> completionHandler) {
 
     // Sanity check
     try {
@@ -62,7 +83,7 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
 
     //
-    backRequest = client.request(frontRequest.method(), target.port(), target.host(), frontRequest.uri());
+    backRequest = backendRequestProvider.apply(frontRequest);
     backRequest.handler(resp -> handle(resp, completionHandler));
 
     // Set headers, don't copy host, as HttpClient will set it
@@ -135,99 +156,114 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
   }
 
-  private void handle(HttpClientResponse backResponse, Handler<AsyncResult<Void>> completionHandler) {
+  private void handle(HttpClientResponse backResponse, Handler<AsyncResult<ProxyResponse>> completionHandler) {
     if (frontRequest == null) {
       return;
     }
-
+    backResponse.pause();
     HttpServerResponse frontResponse = frontRequest.response();
+    ProxyResponseImpl response = new ProxyResponseImpl(backResponse, frontResponse);
+    response.prepare();
+    completionHandler.handle(Future.succeededFuture(response));
+  }
 
-    frontResponse.setStatusCode(backResponse.statusCode());
-    frontResponse.setStatusMessage(backResponse.statusMessage());
+  private class ProxyResponseImpl implements ProxyResponse {
 
-    // Date header
-    String dateHeader = backResponse.headers().get("date");
-    Date date = null;
-    if (dateHeader == null) {
+    private final HttpClientResponse backResponse;
+    private final HttpServerResponse frontResponse;
+
+    public ProxyResponseImpl(HttpClientResponse backResponse, HttpServerResponse frontResponse) {
+      this.backResponse = backResponse;
+      this.frontResponse = frontResponse;
+    }
+
+    @Override
+    public HttpClientResponse backendResponse() {
+      return backResponse;
+    }
+
+    void prepare() {
+
+      frontResponse.setStatusCode(backResponse.statusCode());
+      frontResponse.setStatusMessage(backResponse.statusMessage());
+
+      // Date header
+      String dateHeader = backResponse.headers().get("date");
+      Date date = null;
+      if (dateHeader == null) {
+        List<String> warningHeaders = backResponse.headers().getAll("warning");
+        if (warningHeaders.size() > 0) {
+          for (String warningHeader : warningHeaders) {
+            date = ParseUtils.parseWarningHeaderDate(warningHeader);
+            if (date != null) {
+              break;
+            }
+          }
+        }
+      } else {
+        date = ParseUtils.parseWarningHeaderDate(dateHeader);
+      }
+      if (date == null) {
+        date = new Date();
+      }
+      try {
+        frontResponse.putHeader("date", ParseUtils.formatHttpDate(date));
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+
+      // Suppress incorrect warning header
       List<String> warningHeaders = backResponse.headers().getAll("warning");
       if (warningHeaders.size() > 0) {
-        for (String warningHeader : warningHeaders) {
-          date = ParseUtils.parseWarningHeaderDate(warningHeader);
-          if (date != null) {
-            break;
+        warningHeaders = new ArrayList<>(warningHeaders);
+        Date dateInstant = ParseUtils.parseDateHeaderDate(dateHeader);
+        Iterator<String> i = warningHeaders.iterator();
+        while (i.hasNext()) {
+          String warningHeader = i.next();
+          Date warningInstant = ParseUtils.parseWarningHeaderDate(warningHeader);
+          if (warningInstant != null && dateInstant != null && !warningInstant.equals(dateInstant)) {
+            i.remove();
           }
         }
       }
-    } else {
-      date = ParseUtils.parseWarningHeaderDate(dateHeader);
-    }
-    if (date == null) {
-      date = new Date();
-    }
-    try {
-      frontResponse.putHeader("date", ParseUtils.formatHttpDate(date));
-    } catch (Exception e) {
-      e.printStackTrace();
+      frontResponse.putHeader("warning", warningHeaders);
+
+      // Handle other headers
+      backResponse.headers().forEach(header -> {
+        if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning") || header.getKey().equalsIgnoreCase("transfer-encoding")) {
+          // Skip
+        } else {
+          frontResponse.headers().add(header.getKey(), header.getValue());
+        }
+      });
     }
 
-    // Suppress incorrect warning header
-    List<String> warningHeaders = backResponse.headers().getAll("warning");
-    if (warningHeaders.size() > 0) {
-      warningHeaders = new ArrayList<>(warningHeaders);
-      Date dateInstant = ParseUtils.parseDateHeaderDate(dateHeader);
-      Iterator<String> i = warningHeaders.iterator();
-      while (i.hasNext()) {
-        String warningHeader = i.next();
-        Date warningInstant = ParseUtils.parseWarningHeaderDate(warningHeader);
-        if (warningInstant != null && dateInstant != null && !warningInstant.equals(dateInstant)) {
-          i.remove();
+    @Override
+    public void send(Handler<AsyncResult<Void>> completionHandler) {
+
+      // Determine chunked
+      boolean chunked = false;
+      for (String value : backResponse.headers().getAll("transfer-encoding")) {
+        if (value.equals("chunked")) {
+          chunked = true;
+        } else {
+          frontRequest = null;
+          frontResponse.setStatusCode(501).end();
+          completionHandler.handle(Future.succeededFuture());
+          return;
         }
       }
-    }
-    frontResponse.putHeader("warning", warningHeaders);
 
-    // Handle other headers
-    backResponse.headers().forEach(header -> {
-      if (header.getKey().equalsIgnoreCase("date") || header.getKey().equalsIgnoreCase("warning") || header.getKey().equalsIgnoreCase("transfer-encoding")) {
-        // Skip
-      } else {
-        frontResponse.headers().add(header.getKey(), header.getValue());
-      }
-    });
-
-    // Determine chunked
-    boolean chunked = false;
-    for (String value : backResponse.headers().getAll("transfer-encoding")) {
-      if (value.equals("chunked")) {
-        chunked = true;
-      } else {
-        frontRequest = null;
-        frontResponse.setStatusCode(501).end();
-        completionHandler.handle(Future.succeededFuture());
-        return;
-      }
-    }
-
-    backResponse.exceptionHandler(err -> {
-      HttpServerRequest request = stop();
-      if (request != null) {
-        request.response().close();
-        completionHandler.handle(Future.failedFuture(err));
-      }
-    });
-
-    if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
-      frontResponse.setChunked(true);
-      responsePump = Pump.pump(backResponse, frontResponse);
-      responsePump.start();
-      backResponse.endHandler(v -> {
-        frontRequest = null;
-        frontResponse.end();
-        completionHandler.handle(Future.succeededFuture());
+      backResponse.exceptionHandler(err -> {
+        HttpServerRequest request = stop();
+        if (request != null) {
+          request.response().close();
+          completionHandler.handle(Future.failedFuture(err));
+        }
       });
-    } else {
-      String contentLength = backResponse.getHeader("content-length");
-      if (contentLength != null) {
+
+      if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
+        frontResponse.setChunked(true);
         responsePump = Pump.pump(backResponse, frontResponse);
         responsePump.start();
         backResponse.endHandler(v -> {
@@ -236,12 +272,26 @@ public class ProxyRequestImpl implements ProxyRequest {
           completionHandler.handle(Future.succeededFuture());
         });
       } else {
-        backResponse.bodyHandler(body -> {
-          frontRequest = null;
-          frontResponse.end(body);
-          completionHandler.handle(Future.succeededFuture());
-        });
+        String contentLength = backResponse.getHeader("content-length");
+        if (contentLength != null) {
+          responsePump = Pump.pump(backResponse, frontResponse);
+          responsePump.start();
+          backResponse.endHandler(v -> {
+            frontRequest = null;
+            frontResponse.end();
+            completionHandler.handle(Future.succeededFuture());
+          });
+        } else {
+          backResponse.bodyHandler(body -> {
+            frontRequest = null;
+            frontResponse.end(body);
+            completionHandler.handle(Future.succeededFuture());
+          });
+        }
       }
+
+      backResponse.resume();
     }
   }
+
 }

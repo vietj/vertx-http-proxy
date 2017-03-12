@@ -3,6 +3,7 @@ package io.vertx.httpproxy.impl;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
@@ -12,6 +13,7 @@ import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.http.HttpVersion;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.Pump;
+import io.vertx.core.streams.ReadStream;
 import io.vertx.httpproxy.ProxyRequest;
 import io.vertx.httpproxy.ProxyResponse;
 
@@ -30,6 +32,7 @@ public class ProxyRequestImpl implements ProxyRequest {
   private SocketAddress target;
 
   private Function<HttpServerRequest, HttpClientRequest> backendRequestProvider;
+  private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
 
   private HttpServerRequest frontRequest;
   private HttpClientRequest backRequest;
@@ -71,6 +74,12 @@ public class ProxyRequestImpl implements ProxyRequest {
   }
 
   @Override
+  public ProxyRequest bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter) {
+    bodyFilter = filter;
+    return this;
+  }
+
+  @Override
   public void send(Handler<AsyncResult<ProxyResponse>> completionHandler) {
 
     // Sanity check
@@ -78,6 +87,7 @@ public class ProxyRequestImpl implements ProxyRequest {
       frontRequest.version();
     } catch (IllegalStateException e) {
       // Sends 501
+      frontRequest.resume();
       completionHandler.handle(Future.failedFuture(e));
       return;
     }
@@ -94,7 +104,7 @@ public class ProxyRequestImpl implements ProxyRequest {
         if (header.getValue().equals("chunked")) {
           backRequest.setChunked(true);
         } else {
-          frontRequest.response().setStatusCode(400).end();
+          frontRequest.resume().response().setStatusCode(400).end();
           return;
         }
       } else {
@@ -102,22 +112,25 @@ public class ProxyRequestImpl implements ProxyRequest {
       }
     }
 
-    frontRequest.endHandler(v -> {
+    // Apply body filter
+    ReadStream<Buffer> bodyStream = bodyFilter.apply(frontRequest);
+
+    bodyStream.endHandler(v -> {
       requestPump = null;
       backRequest.end();
     });
-    requestPump = Pump.pump(frontRequest, backRequest);
+    requestPump = Pump.pump(bodyStream, backRequest);
     backRequest.exceptionHandler(err -> {
       resetClient();
       completionHandler.handle(Future.failedFuture(err));
     });
-    frontRequest.response().endHandler(v -> {
+    this.frontRequest.response().endHandler(v -> {
       if (stop() != null) {
         backRequest.reset();
         completionHandler.handle(Future.failedFuture("no-msg"));
       }
     });
-    frontRequest.resume();
+    bodyStream.resume();
     requestPump.start();
   }
 
@@ -171,10 +184,17 @@ public class ProxyRequestImpl implements ProxyRequest {
 
     private final HttpClientResponse backResponse;
     private final HttpServerResponse frontResponse;
+    private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
 
     public ProxyResponseImpl(HttpClientResponse backResponse, HttpServerResponse frontResponse) {
       this.backResponse = backResponse;
       this.frontResponse = frontResponse;
+    }
+
+    @Override
+    public ProxyResponse bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter) {
+      bodyFilter = filter;
+      return this;
     }
 
     @Override
@@ -262,11 +282,14 @@ public class ProxyRequestImpl implements ProxyRequest {
         }
       });
 
+      // Apply body filter
+      ReadStream<Buffer> bodyStream = bodyFilter.apply(backResponse);
+
       if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
         frontResponse.setChunked(true);
-        responsePump = Pump.pump(backResponse, frontResponse);
+        responsePump = Pump.pump(bodyStream, frontResponse);
         responsePump.start();
-        backResponse.endHandler(v -> {
+        bodyStream.endHandler(v -> {
           frontRequest = null;
           frontResponse.end();
           completionHandler.handle(Future.succeededFuture());
@@ -274,15 +297,17 @@ public class ProxyRequestImpl implements ProxyRequest {
       } else {
         String contentLength = backResponse.getHeader("content-length");
         if (contentLength != null) {
-          responsePump = Pump.pump(backResponse, frontResponse);
+          responsePump = Pump.pump(bodyStream, frontResponse);
           responsePump.start();
-          backResponse.endHandler(v -> {
+          bodyStream.endHandler(v -> {
             frontRequest = null;
             frontResponse.end();
             completionHandler.handle(Future.succeededFuture());
           });
         } else {
-          backResponse.bodyHandler(body -> {
+          Buffer body = Buffer.buffer();
+          bodyStream.handler(body::appendBuffer);
+          bodyStream.endHandler(v -> {
             frontRequest = null;
             frontResponse.end(body);
             completionHandler.handle(Future.succeededFuture());

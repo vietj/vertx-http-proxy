@@ -4,10 +4,12 @@ import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.SocketAddress;
+import io.vertx.core.streams.ReadStream;
 import io.vertx.httpproxy.impl.ProxyRequestImpl;
 
 import java.util.function.Function;
@@ -27,6 +29,9 @@ public interface ProxyRequest {
 
   @Fluent
   ProxyRequest target(SocketAddress target);
+
+  @Fluent
+  ProxyRequest bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
 
   void handle(Handler<AsyncResult<Void>> completionHandler);
 

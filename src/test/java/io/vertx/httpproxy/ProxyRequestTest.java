@@ -12,6 +12,7 @@ import io.vertx.core.http.HttpVersion;
 import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.SocketAddress;
+import io.vertx.core.streams.ReadStream;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
@@ -19,6 +20,8 @@ import org.junit.Test;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -173,6 +176,160 @@ public class ProxyRequestTest extends ProxyTestBase {
       });
     });
     req.end(sent);
+  }
+
+  @Test
+  public void testRequestFilter(TestContext ctx) throws Exception {
+    Filter filter = new Filter();
+    CompletableFuture<Integer> onResume = new CompletableFuture<>();
+    HttpClient client = vertx.createHttpClient();
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      req.pause();
+      onResume.thenAccept(num -> {
+        req.bodyHandler(body -> {
+          ctx.assertEquals(filter.expected, body);
+          req.response().end();
+        });
+        req.resume();
+      });
+    });
+    HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = ProxyRequest.reverse(backendClient);
+      proxyReq.target(backend);
+      proxyReq.request(req);
+      proxyReq.bodyFilter(filter::init);
+      proxyReq.send(ctx.asyncAssertSuccess(resp -> resp.send(ctx.asyncAssertSuccess())));
+    });
+    Async async = ctx.async();
+    HttpClientRequest req = client.post(8080, "localhost", "/somepath", resp -> {
+      async.complete();
+    }).setChunked(true);
+    int num = 0;
+    while (!filter.paused.get()) {
+      req.write(CHUNK);
+      Thread.sleep(1);
+      num++;
+    }
+    req.end();
+    onResume.complete(num);
+  }
+
+  @Test
+  public void testResponseFilter(TestContext ctx) throws Exception {
+    Filter filter = new Filter();
+    CompletableFuture<Integer> onResume = new CompletableFuture<>();
+    HttpClient client = vertx.createHttpClient();
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      HttpServerResponse resp = req.response().setChunked(true);
+      AtomicInteger num = new AtomicInteger();
+      vertx.setPeriodic(1, id -> {
+        if (!filter.paused.get()) {
+          resp.write(CHUNK);
+          num.getAndIncrement();
+        } else {
+          vertx.cancelTimer(id);
+          resp.end();
+          onResume.complete(num.get());
+        }
+      });
+    });
+    HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = ProxyRequest.reverse(backendClient);
+      proxyReq.target(backend);
+      proxyReq.request(req);
+      proxyReq.send(ctx.asyncAssertSuccess(proxyResp -> {
+        proxyResp.bodyFilter(filter::init);
+        proxyResp.send(ctx.asyncAssertSuccess());
+      }));
+    });
+    Async async = ctx.async();
+    client.get(8080, "localhost", "/somepath", resp -> {
+      resp.pause();
+      onResume.thenAccept(num -> {
+        resp.resume();
+      });
+      resp.endHandler(v -> {
+        async.complete();
+      });
+    }).end();
+  }
+
+  private static Buffer CHUNK;
+
+  static {
+    byte[] bytes = new byte[1024];
+    for (int i = 0;i < 1024;i++) {
+      bytes[i] = (byte)('A' + (i % 26));
+    }
+    CHUNK = Buffer.buffer(bytes);
+  }
+
+  static class Filter implements ReadStream<Buffer> {
+
+    private final AtomicBoolean paused = new AtomicBoolean();
+    private ReadStream<Buffer> stream;
+    private Buffer expected = Buffer.buffer();
+    private Handler<Buffer> dataHandler;
+    private Handler<Throwable> exceptionHandler;
+    private Handler<Void> endHandler;
+
+    ReadStream<Buffer> init(ReadStream<Buffer> s) {
+      stream = s;
+      stream.handler(buff -> {
+        if (dataHandler != null) {
+          byte[] bytes = new byte[buff.length()];
+          for (int i = 0;i < bytes.length;i++) {
+            bytes[i] = (byte)(('a' - 'A') + buff.getByte(i));
+          }
+          expected.appendBytes(bytes);
+          dataHandler.handle(Buffer.buffer(bytes));
+        }
+      });
+      stream.exceptionHandler(err -> {
+        if (exceptionHandler != null) {
+          exceptionHandler.handle(err);
+        }
+      });
+      stream.endHandler(v -> {
+        if (endHandler != null) {
+          endHandler.handle(v);
+        }
+      });
+      return this;
+    }
+
+    @Override
+    public ReadStream<Buffer> pause() {
+      paused.set(true);
+      stream.pause();
+      return this;
+    }
+
+    @Override
+    public ReadStream<Buffer> resume() {
+      stream.resume();
+      return this;
+    }
+
+    @Override
+    public ReadStream<Buffer> exceptionHandler(Handler<Throwable> handler) {
+      exceptionHandler = handler;
+      return this;
+    }
+
+    @Override
+    public ReadStream<Buffer> handler(Handler<Buffer> handler) {
+      dataHandler = handler;
+      return this;
+    }
+
+    @Override
+    public ReadStream<Buffer> endHandler(Handler<Void> handler) {
+      endHandler = handler;
+      return this;
+    }
   }
 
   private void runHttpTest(TestContext ctx,

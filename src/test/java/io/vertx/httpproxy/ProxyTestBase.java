@@ -1,5 +1,6 @@
 package io.vertx.httpproxy;
 
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
@@ -17,6 +18,8 @@ import io.vertx.ext.unit.junit.VertxUnitRunner;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.runner.RunWith;
+
+import java.util.function.Function;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -43,9 +46,14 @@ public class ProxyTestBase {
   }
 
   protected void startProxy(TestContext ctx, SocketAddress backend) {
+    startProxy(ctx, req -> Future.succeededFuture(backend));
+  }
+
+  protected void startProxy(TestContext ctx, Function<HttpServerRequest, Future<SocketAddress>> selector) {
     HttpClient proxyClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions(proxyOptions));
-    HttpProxy proxy = HttpProxy.reverseProxy(proxyClient, backend);
+    HttpProxy proxy = HttpProxy.reverseProxy(proxyClient);
+    proxy.targetSelector(selector);
     proxyServer.requestHandler(proxy);
     Async async1 = ctx.async();
     proxyServer.listen(ctx.asyncAssertSuccess(p -> async1.complete()));

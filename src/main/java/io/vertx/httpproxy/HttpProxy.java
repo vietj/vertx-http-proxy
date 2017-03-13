@@ -2,13 +2,12 @@ package io.vertx.httpproxy;
 
 import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.VertxGen;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.SocketAddress;
-import io.vertx.core.streams.ReadStream;
 import io.vertx.httpproxy.impl.HttpProxyImpl;
 
 import java.util.function.Function;
@@ -19,8 +18,8 @@ import java.util.function.Function;
 @VertxGen
 public interface HttpProxy extends Handler<HttpServerRequest> {
 
-  static HttpProxy reverseProxy(HttpClient client, SocketAddress address) {
-    return new HttpProxyImpl(client, address);
+  static HttpProxy reverseProxy(HttpClient client) {
+    return new HttpProxyImpl(client);
   }
 
   @Fluent
@@ -28,6 +27,12 @@ public interface HttpProxy extends Handler<HttpServerRequest> {
 
   @Fluent
   HttpProxy responseBodyFilter(Function<HttpClientResponse, BodyFilter> filter);
+
+  @Fluent
+  HttpProxy target(SocketAddress target);
+
+  @Fluent
+  HttpProxy targetSelector(Function<HttpServerRequest, Future<SocketAddress>> selector);
 
   void handle(HttpServerRequest request);
 

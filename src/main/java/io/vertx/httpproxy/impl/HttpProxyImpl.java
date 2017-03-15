@@ -7,6 +7,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.SocketAddress;
+import io.vertx.core.net.impl.SocketAddressImpl;
 import io.vertx.httpproxy.BodyFilter;
 import io.vertx.httpproxy.HttpProxy;
 import io.vertx.httpproxy.ProxyResponse;
@@ -40,9 +41,14 @@ public class HttpProxyImpl implements HttpProxy {
   }
 
   @Override
-  public HttpProxy target(SocketAddress target) {
-    targetSelector = req -> Future.succeededFuture(target);
+  public HttpProxy target(SocketAddress address) {
+    targetSelector = req -> Future.succeededFuture(address);
     return this;
+  }
+
+  @Override
+  public HttpProxy target(int port, String host) {
+    return target(new SocketAddressImpl(port, host));
   }
 
   @Override

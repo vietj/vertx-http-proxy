@@ -29,7 +29,10 @@ public interface HttpProxy extends Handler<HttpServerRequest> {
   HttpProxy responseBodyFilter(Function<HttpClientResponse, BodyFilter> filter);
 
   @Fluent
-  HttpProxy target(SocketAddress target);
+  HttpProxy target(SocketAddress address);
+
+  @Fluent
+  HttpProxy target(int port, String host);
 
   @Fluent
   HttpProxy targetSelector(Function<HttpServerRequest, Future<SocketAddress>> selector);

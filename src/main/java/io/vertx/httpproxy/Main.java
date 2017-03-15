@@ -38,37 +38,24 @@ public class Main {
     HttpClient client = vertx.createHttpClient(new HttpClientOptions()
         .setMaxInitialLineLength(10000)
         .setLogActivity(true));
-    HttpServer server = vertx.createHttpServer(new HttpServerOptions()
+    HttpProxy proxy = HttpProxy
+        .reverseProxy(client)
+        .target(8081, "96.126.115.136");
+    HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions()
         .setPort(port)
         .setMaxInitialLineLength(10000)
         .setLogActivity(true))
-        .requestHandler(HttpProxy
-            .reverseProxy(client)
-            .target(8081, "96.126.115.136")
-        );
-    server.listen(ar -> {
+        .requestHandler(req -> {
+          System.out.println("------------------------------------------");
+          System.out.println(req.path());
+          proxy.handle(req);
+        });
+    proxyServer.listen(ar -> {
       if (ar.succeeded()) {
         System.out.println("Proxy server started on " + port);
       } else {
         ar.cause().printStackTrace();
       }
     });
-
-
-/*
-
-    proxy.beginRequestHandler(req -> {
-      System.out.println("------------------------------------------");
-      System.out.println(req.path());
-    });
-
-    proxy.listen(ar -> {
-      if (ar.succeeded()) {
-        System.out.println("Proxy server started on " + port);
-      } else {
-        ar.cause().printStackTrace();
-      }
-    });
-*/
   }
 }

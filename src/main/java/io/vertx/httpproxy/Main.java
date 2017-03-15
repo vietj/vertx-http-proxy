@@ -7,7 +7,10 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 import io.netty.util.internal.logging.Log4JLoggerFactory;
 import io.netty.util.internal.logging.Slf4JLoggerFactory;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.net.impl.SocketAddressImpl;
 
@@ -30,23 +33,29 @@ public class Main {
   }
 
   public void run() {
-//    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE);
-/*
+    InternalLoggerFactory.setDefaultFactory(Slf4JLoggerFactory.INSTANCE);
     Vertx vertx = Vertx.vertx();
-    Backend backend = new Backend() {
-      @Override
-      public SocketAddress next() {
-        return new SocketAddressImpl(8081, "96.126.115.136");
+    HttpClient client = vertx.createHttpClient(new HttpClientOptions()
+        .setMaxInitialLineLength(10000)
+        .setLogActivity(true));
+    HttpServer server = vertx.createHttpServer(new HttpServerOptions()
+        .setPort(port)
+        .setMaxInitialLineLength(10000)
+        .setLogActivity(true))
+        .requestHandler(HttpProxy
+            .reverseProxy(client)
+            .target(8081, "96.126.115.136")
+        );
+    server.listen(ar -> {
+      if (ar.succeeded()) {
+        System.out.println("Proxy server started on " + port);
+      } else {
+        ar.cause().printStackTrace();
       }
-    };
-    HttpProxyOptions options = new HttpProxyOptions();
-    options.getServerOptions().setPort(port);
-    options.getServerOptions().setMaxInitialLineLength(10000);
-    options.getClientOptions().setMaxInitialLineLength(10000);
-//    options.getServerOptions().setLogActivity(true);
-//    options.getClientOptions().setLogActivity(true);
-    HttpProxy proxy = HttpProxy.createProxy(vertx, options);
-    proxy.addBackend(request -> request.handle(backend));
+    });
+
+
+/*
 
     proxy.beginRequestHandler(req -> {
       System.out.println("------------------------------------------");

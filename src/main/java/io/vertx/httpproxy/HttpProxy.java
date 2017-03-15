@@ -23,12 +23,6 @@ public interface HttpProxy extends Handler<HttpServerRequest> {
   }
 
   @Fluent
-  HttpProxy requestBodyFilter(Function<HttpServerRequest, BodyFilter> filter);
-
-  @Fluent
-  HttpProxy responseBodyFilter(Function<HttpClientResponse, BodyFilter> filter);
-
-  @Fluent
   HttpProxy target(SocketAddress address);
 
   @Fluent

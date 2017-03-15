@@ -29,20 +29,22 @@ public class ProxyTest extends ProxyTestBase {
     AtomicInteger count = new AtomicInteger();
     startProxy(ctx, req -> Future.succeededFuture(backends[count.getAndIncrement() % backends.length]));
     HttpClient client = vertx.createHttpClient();
-    Map<String, AtomicInteger> result = new HashMap<>();
+    Map<String, AtomicInteger> result = Collections.synchronizedMap(new HashMap<>());
     Async latch = ctx.async();
-    AtomicInteger countDown = new AtomicInteger(backends.length * numRequests);
     for (int i = 0;i < backends.length * numRequests;i++) {
       client.getNow(8080, "localhost", "/", resp -> {
         resp.bodyHandler(buff -> {
           result.computeIfAbsent(buff.toString(), k -> new AtomicInteger()).getAndIncrement();
-          if (countDown.decrementAndGet() == 0) {
-            for (int j = 0;j < backends.length;j++) {
-              AtomicInteger val = result.remove("" + j);
-              ctx.assertEquals(numRequests, val.get());
+          synchronized (result) {
+            int total = result.values().stream().reduce(0, (a, b) -> a + b.get(), (a, b) -> a + b);
+            if (total == backends.length * numRequests) {
+              for (int j = 0;j < backends.length;j++) {
+                AtomicInteger val = result.remove("" + j);
+                ctx.assertEquals(numRequests, val.get());
+              }
+              ctx.assertEquals(result, Collections.emptyMap());
+              latch.complete();
             }
-            ctx.assertEquals(result, Collections.emptyMap());
-            latch.complete();
           }
         });
       });

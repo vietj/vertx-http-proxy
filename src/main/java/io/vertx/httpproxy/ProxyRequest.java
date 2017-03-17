@@ -4,6 +4,7 @@ import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
+import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
@@ -20,30 +21,25 @@ import java.util.function.Function;
 @VertxGen
 public interface ProxyRequest {
 
-  static ProxyRequest reverse(HttpClient client) {
-    return new ProxyRequestImpl(client);
-  }
-
-  @Fluent
-  ProxyRequest request(HttpServerRequest request);
-
-  @Fluent
-  ProxyRequest target(SocketAddress target);
+  /**
+   * @return the headers that will be sent to the target, the returned headers can be modified
+   */
+  MultiMap headers();
 
   @Fluent
   ProxyRequest bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
 
-  void handle(Handler<AsyncResult<Void>> completionHandler);
+  void proxy(SocketAddress target, Handler<AsyncResult<Void>> completionHandler);
 
-  void send(Handler<AsyncResult<ProxyResponse>> completionHandler);
+  void send(SocketAddress target, Handler<AsyncResult<ProxyResponse>> completionHandler);
 
   /**
    * Set a function that returns a {@link HttpClientRequest} to send for a given {@link HttpServerRequest}.
    *
    * @param provider the function
-   * @return this proxy request instance
+   * @return this client request instance
    */
   @Fluent
-  ProxyRequest backendRequestProvider(Function<HttpServerRequest, HttpClientRequest> provider);
+  ProxyRequest requestProvider(Function<HttpServerRequest, HttpClientRequest> provider);
 
 }

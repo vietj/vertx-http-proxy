@@ -3,6 +3,7 @@ package io.vertx.httpproxy.impl;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
@@ -29,41 +30,36 @@ import java.util.function.Function;
  */
 public class ProxyRequestImpl implements ProxyRequest {
 
-  private SocketAddress target;
-
-  private Function<HttpServerRequest, HttpClientRequest> backendRequestProvider;
-  private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
+  private final HttpClient httpClient;
 
   private HttpServerRequest frontRequest;
+
+  private Function<HttpServerRequest, HttpClientRequest> requestProvider;
+  private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
+
+  private MultiMap headers;
+
   private HttpClientRequest backRequest;
   private Pump requestPump;
   private Pump responsePump;
 
-  public ProxyRequestImpl(HttpClient client) {
-    backendRequestProvider(req -> client.request(frontRequest.method(), target.port(), target.host(), frontRequest.uri()));
-  }
-
-  @Override
-  public ProxyRequest backendRequestProvider(Function<HttpServerRequest, HttpClientRequest> provider) {
-    backendRequestProvider = provider;
-    return this;
-  }
-
-  @Override
-  public ProxyRequest request(HttpServerRequest request) {
+  public ProxyRequestImpl(HttpClient client, HttpServerRequest request) {
+    if (request == null) {
+      throw new NullPointerException();
+    }
+    httpClient = client;
     frontRequest = request;
+  }
+
+  @Override
+  public ProxyRequest requestProvider(Function<HttpServerRequest, HttpClientRequest> provider) {
+    requestProvider = provider;
     return this;
   }
 
   @Override
-  public ProxyRequest target(SocketAddress address) {
-    target = address;
-    return this;
-  }
-
-  @Override
-  public void handle(Handler<AsyncResult<Void>> completionHandler) {
-    send(ar -> {
+  public void proxy(SocketAddress target, Handler<AsyncResult<Void>> completionHandler) {
+    send(target, ar -> {
       if (ar.succeeded()) {
         ProxyResponse resp = ar.result();
         resp.send(completionHandler);
@@ -80,9 +76,29 @@ public class ProxyRequestImpl implements ProxyRequest {
   }
 
   @Override
-  public void send(Handler<AsyncResult<ProxyResponse>> completionHandler) {
+  public MultiMap headers() {
+    if (headers == null) {
+      headers = MultiMap.caseInsensitiveMultiMap();
+      copyHeaders(headers);
+    }
+    return headers;
+  }
 
-    // Sanity check
+  private void copyHeaders(MultiMap to) {
+    // Set headers, don't copy host, as HttpClient will set it
+    for (Map.Entry<String, String> header : frontRequest.headers()) {
+      if (header.getKey().equalsIgnoreCase("host")) {
+        //
+      } else {
+        to.add(header.getKey(), header.getValue());
+      }
+    }
+  }
+
+  @Override
+  public void send(SocketAddress target, Handler<AsyncResult<ProxyResponse>> completionHandler) {
+
+    // Sanity check 1
     try {
       frontRequest.version();
     } catch (IllegalStateException e) {
@@ -92,24 +108,41 @@ public class ProxyRequestImpl implements ProxyRequest {
       return;
     }
 
-    //
-    backRequest = backendRequestProvider.apply(frontRequest);
-    backRequest.handler(resp -> handle(resp, completionHandler));
+    // Create back request
+    if (requestProvider != null) {
+      backRequest = requestProvider.apply(frontRequest);
+    } else {
+      backRequest = httpClient.request(frontRequest.method(), target.port(), target.host(), frontRequest.uri());
+    }
 
-    // Set headers, don't copy host, as HttpClient will set it
-    for (Map.Entry<String, String> header : frontRequest.headers()) {
-      if (header.getKey().equalsIgnoreCase("host")) {
-        //
-      } else if (header.getKey().equalsIgnoreCase("transfer-encoding")) {
-        if (header.getValue().equals("chunked")) {
+    // Encoding check
+    List<String> te = frontRequest.headers().getAll("transfer-encoding");
+    if (te != null) {
+      for (String val : te) {
+        if (val.equals("chunked")) {
           backRequest.setChunked(true);
         } else {
           frontRequest.resume().response().setStatusCode(400).end();
+          // I think we should make a call to completion handler at this point - it does not seem to be tested
           return;
         }
-      } else {
-        backRequest.putHeader(header.getKey(), header.getValue());
       }
+    }
+
+    //
+    backRequest.handler(resp -> handle(resp, completionHandler));
+
+    // Set headers
+    if (headers != null) {
+      // Handler specially the host header
+      String host = headers.get("host");
+      if (host != null) {
+        headers.remove("host");
+        backRequest.setHost(host);
+      }
+      backRequest.headers().setAll(headers);
+    } else {
+      copyHeaders(backRequest.headers());
     }
 
     // Apply body filter
@@ -198,8 +231,8 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
 
     @Override
-    public HttpClientResponse backendResponse() {
-      return backResponse;
+    public MultiMap headers() {
+      return frontResponse.headers();
     }
 
     void prepare() {

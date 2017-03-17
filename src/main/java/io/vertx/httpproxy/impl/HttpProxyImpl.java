@@ -6,6 +6,7 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.net.impl.SocketAddressImpl;
 import io.vertx.httpproxy.HttpProxy;
+import io.vertx.httpproxy.ProxyRequest;
 import io.vertx.httpproxy.ProxyResponse;
 
 import java.util.function.Function;
@@ -29,6 +30,11 @@ public class HttpProxyImpl implements HttpProxy {
   }
 
   @Override
+  public ProxyRequest proxy(HttpServerRequest request) {
+    return new ProxyRequestImpl(client, request);
+  }
+
+  @Override
   public HttpProxy target(int port, String host) {
     return target(new SocketAddressImpl(port, host));
   }
@@ -46,11 +52,9 @@ public class HttpProxyImpl implements HttpProxy {
     fut.setHandler(ar -> {
       if (ar.succeeded()) {
         SocketAddress target = ar.result();
-        ProxyRequestImpl proxyReq = new ProxyRequestImpl(client);
+        ProxyRequestImpl proxyReq = new ProxyRequestImpl(client, request);
         // proxyReq.bodyFilter(requestBodyFilter.apply(request));
-        proxyReq.request(request);
-        proxyReq.target(target);
-        proxyReq.send(ar1 -> {
+        proxyReq.send(target, ar1 -> {
           if (ar1.succeeded()) {
             ProxyResponse proxyResp = ar1.result();
             // proxyResp.bodyFilter(responseBodyFilter.apply(proxyResp.backendResponse()));

@@ -33,4 +33,6 @@ public interface HttpProxy extends Handler<HttpServerRequest> {
 
   void handle(HttpServerRequest request);
 
+  ProxyRequest proxy(HttpServerRequest request);
+
 }

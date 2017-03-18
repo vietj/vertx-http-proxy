@@ -9,6 +9,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpConnection;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.http.HttpVersion;
@@ -112,7 +113,11 @@ public class ProxyRequestImpl implements ProxyRequest {
     if (requestProvider != null) {
       backRequest = requestProvider.apply(frontRequest);
     } else {
-      backRequest = httpClient.request(frontRequest.method(), target.port(), target.host(), frontRequest.uri());
+      HttpMethod method = frontRequest.method();
+      backRequest = httpClient.request(method, target.port(), target.host(), frontRequest.uri());
+      if (method == HttpMethod.OTHER) {
+        backRequest.setRawMethod(frontRequest.rawMethod());
+      }
     }
 
     // Encoding check

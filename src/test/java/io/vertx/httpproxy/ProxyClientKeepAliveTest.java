@@ -5,6 +5,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpConnection;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.http.HttpVersion;
@@ -530,6 +531,19 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         "0123456789\r\n" +
         "0\r\n" +
         "\r\n");
+  }
+
+  @Test
+  public void testRawMethod(TestContext ctx) throws Exception {
+    Async latch = ctx.async();
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      ctx.assertEquals(HttpMethod.OTHER, req.method());
+      ctx.assertEquals("FOO", req.rawMethod());
+      req.response().end();
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    client.request(HttpMethod.OTHER, 8080, "localhost", "/", resp -> latch.complete()).setRawMethod("FOO").end();
   }
 
   private void checkBadResponse(TestContext ctx, String response) throws Exception {

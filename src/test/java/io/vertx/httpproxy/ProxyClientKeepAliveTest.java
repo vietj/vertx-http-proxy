@@ -546,6 +546,24 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     client.request(HttpMethod.OTHER, 8080, "localhost", "/", resp -> latch.complete()).setRawMethod("FOO").end();
   }
 
+  @Test
+  public void testHead(TestContext ctx) throws Exception {
+    Async latch = ctx.async();
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      ctx.assertEquals(HttpMethod.HEAD, req.method());
+      req.response().end("content");
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    client.request(HttpMethod.HEAD, 8080, "localhost", "/", resp -> {
+      ctx.assertEquals("" + ("content".length()), resp.getHeader("content-length"));
+      resp.bodyHandler(buff -> {
+        ctx.assertEquals("", buff.toString());
+        latch.complete();
+      });
+    }).setRawMethod("FOO").end();
+  }
+
   private void checkBadResponse(TestContext ctx, String response) throws Exception {
     SocketAddress backend = startNetBackend(ctx, 8081, so -> {
       Buffer body = Buffer.buffer();

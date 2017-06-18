@@ -326,7 +326,9 @@ public class ProxyRequestImpl implements ProxyRequest {
       ReadStream<Buffer> bodyStream = bodyFilter.apply(backResponse);
 
       if (frontRequest.method() == HttpMethod.HEAD) {
+        frontRequest = null;
         frontResponse.end();
+        completionHandler.handle(Future.succeededFuture());
       } else {
         if (chunked && frontRequest.version() == HttpVersion.HTTP_1_1) {
           frontResponse.setChunked(true);

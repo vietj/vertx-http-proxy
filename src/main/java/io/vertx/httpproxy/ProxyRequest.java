@@ -29,17 +29,8 @@ public interface ProxyRequest {
   @Fluent
   ProxyRequest bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
 
-  void proxy(SocketAddress target, Handler<AsyncResult<Void>> completionHandler);
+  void proxy(Handler<AsyncResult<Void>> completionHandler);
 
-  void send(SocketAddress target, Handler<AsyncResult<ProxyResponse>> completionHandler);
-
-  /**
-   * Set a function that returns a {@link HttpClientRequest} to send for a given {@link HttpServerRequest}.
-   *
-   * @param provider the function
-   * @return this client request instance
-   */
-  @Fluent
-  ProxyRequest requestProvider(Function<HttpServerRequest, HttpClientRequest> provider);
+  void send(Handler<AsyncResult<ProxyResponse>> completionHandler);
 
 }

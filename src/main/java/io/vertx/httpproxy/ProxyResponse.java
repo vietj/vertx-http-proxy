@@ -1,5 +1,6 @@
 package io.vertx.httpproxy;
 
+import io.vertx.codegen.annotations.CacheReturn;
 import io.vertx.codegen.annotations.Fluent;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
@@ -8,6 +9,7 @@ import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.streams.ReadStream;
+import io.vertx.httpproxy.impl.CacheControl;
 
 import java.util.function.Function;
 
@@ -17,6 +19,19 @@ import java.util.function.Function;
 @VertxGen
 public interface ProxyResponse {
 
+  int getStatusCode();
+
+  String getStatusMessage();
+
+  @CacheReturn
+  boolean publicCacheControl();
+
+  @CacheReturn
+  long maxAge();
+
+  @CacheReturn
+  String etag();
+
   /**
    * @return the headers that will be sent to the client, the returned headers can be modified
    */
@@ -25,6 +40,25 @@ public interface ProxyResponse {
   @Fluent
   ProxyResponse bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
 
+  /**
+   * Set the proxy response to use the {@code response}, this will update the values returned by {@link #getStatusCode()},
+   * {@link #getStatusMessage()}, {@link #headers()}, {@link #publicCacheControl()}, {@link #maxAge()}.
+   *
+   * @param response the response to use
+   */
+  @Fluent
+  ProxyResponse set(HttpClientResponse response);
+
+  /**
+   * Send the proxy response to the client.
+   *
+   * @param completionHandler the handler to be called when the response has been sent
+   */
   void send(Handler<AsyncResult<Void>> completionHandler);
+
+  /**
+   * Cancels the proxy request, this will release the resources.
+   */
+  void cancel();
 
 }

@@ -9,13 +9,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.function.Consumer;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
  */
 public class ParseUtils {
 
-  public static Date parseDateHeaderDate(String value) {
+  public static Date parseHeaderDate(String value) {
     try {
       return parseHttpDate(value);
     } catch (Exception e) {

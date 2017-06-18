@@ -5,6 +5,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpConnection;
+import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.HttpServerResponse;
@@ -14,10 +15,13 @@ import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.WriteStream;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
+import io.vertx.httpproxy.impl.ParseUtils;
 import org.junit.Test;
 
+import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -561,7 +565,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         ctx.assertEquals("", buff.toString());
         latch.complete();
       });
-    }).setRawMethod("FOO").end();
+    }).end();
   }
 
   private void checkBadResponse(TestContext ctx, String response) throws Exception {

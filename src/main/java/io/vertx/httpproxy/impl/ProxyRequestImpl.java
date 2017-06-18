@@ -9,6 +9,7 @@ import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpConnection;
+import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
@@ -31,11 +32,9 @@ import java.util.function.Function;
  */
 public class ProxyRequestImpl implements ProxyRequest {
 
-  private final HttpClient httpClient;
-
   private HttpServerRequest frontRequest;
 
-  private Function<HttpServerRequest, HttpClientRequest> requestProvider;
+  private Function<HttpServerRequest, HttpClientRequest> provider;
   private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
 
   private MultiMap headers;
@@ -44,23 +43,28 @@ public class ProxyRequestImpl implements ProxyRequest {
   private Pump requestPump;
   private Pump responsePump;
 
-  public ProxyRequestImpl(HttpClient client, HttpServerRequest request) {
+  public ProxyRequestImpl(HttpClient client, SocketAddress target, HttpServerRequest request) {
+    this(req -> {
+      HttpMethod method = req.method();
+      HttpClientRequest backRequest = client.request(method, target.port(), target.host(), req.uri());
+      if (method == HttpMethod.OTHER) {
+        backRequest.setRawMethod(req.rawMethod());
+      }
+      return backRequest;
+    }, request);
+  }
+
+  public ProxyRequestImpl(Function<HttpServerRequest, HttpClientRequest> provider, HttpServerRequest request) {
     if (request == null) {
       throw new NullPointerException();
     }
-    httpClient = client;
-    frontRequest = request;
+    this.provider = provider;
+    this.frontRequest = request;
   }
 
   @Override
-  public ProxyRequest requestProvider(Function<HttpServerRequest, HttpClientRequest> provider) {
-    requestProvider = provider;
-    return this;
-  }
-
-  @Override
-  public void proxy(SocketAddress target, Handler<AsyncResult<Void>> completionHandler) {
-    send(target, ar -> {
+  public void proxy(Handler<AsyncResult<Void>> completionHandler) {
+    send(ar -> {
       if (ar.succeeded()) {
         ProxyResponse resp = ar.result();
         resp.send(completionHandler);
@@ -97,7 +101,7 @@ public class ProxyRequestImpl implements ProxyRequest {
   }
 
   @Override
-  public void send(SocketAddress target, Handler<AsyncResult<ProxyResponse>> completionHandler) {
+  public void send(Handler<AsyncResult<ProxyResponse>> completionHandler) {
 
     // Sanity check 1
     try {
@@ -110,15 +114,7 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
 
     // Create back request
-    if (requestProvider != null) {
-      backRequest = requestProvider.apply(frontRequest);
-    } else {
-      HttpMethod method = frontRequest.method();
-      backRequest = httpClient.request(method, target.port(), target.host(), frontRequest.uri());
-      if (method == HttpMethod.OTHER) {
-        backRequest.setRawMethod(frontRequest.rawMethod());
-      }
-    }
+    backRequest = provider.apply(frontRequest);
 
     // Encoding check
     List<String> te = frontRequest.headers().getAll("transfer-encoding");
@@ -168,8 +164,8 @@ public class ProxyRequestImpl implements ProxyRequest {
         completionHandler.handle(Future.failedFuture("no-msg"));
       }
     });
-    bodyStream.resume();
     requestPump.start();
+    bodyStream.resume();
   }
 
   /**
@@ -213,26 +209,55 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
     backResponse.pause();
     HttpServerResponse frontResponse = frontRequest.response();
-    ProxyResponseImpl response = new ProxyResponseImpl(backResponse, frontResponse);
-    response.prepare();
+    ProxyResponseImpl response = new ProxyResponseImpl(frontResponse);
+    response.set(backResponse);
     completionHandler.handle(Future.succeededFuture(response));
   }
 
   private class ProxyResponseImpl implements ProxyResponse {
 
-    private final HttpClientResponse backResponse;
+    private HttpClientResponse backResponse;
     private final HttpServerResponse frontResponse;
     private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
+    private long maxAge;
+    private String etag;
+    private boolean publicCacheControl;
+    private boolean sent;
 
-    public ProxyResponseImpl(HttpClientResponse backResponse, HttpServerResponse frontResponse) {
-      this.backResponse = backResponse;
+    public ProxyResponseImpl(HttpServerResponse frontResponse) {
       this.frontResponse = frontResponse;
     }
 
     @Override
     public ProxyResponse bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter) {
+      checkSent();
       bodyFilter = filter;
       return this;
+    }
+
+    @Override
+    public int getStatusCode() {
+      return frontResponse.getStatusCode();
+    }
+
+    @Override
+    public String getStatusMessage() {
+      return frontResponse.getStatusMessage();
+    }
+
+    @Override
+    public boolean publicCacheControl() {
+      return publicCacheControl;
+    }
+
+    @Override
+    public long maxAge() {
+      return maxAge;
+    }
+
+    @Override
+    public String etag() {
+      return etag;
     }
 
     @Override
@@ -240,7 +265,39 @@ public class ProxyRequestImpl implements ProxyRequest {
       return frontResponse.headers();
     }
 
-    void prepare() {
+    private void checkSent() {
+      if (sent) {
+        throw new IllegalStateException();
+      }
+    }
+
+    public ProxyResponse set(HttpClientResponse backResponse) {
+      checkSent();
+
+      this.frontResponse.headers().clear();
+      this.backResponse = backResponse;
+
+      long maxAge = -1;
+      boolean publicCacheControl = false;
+      String cacheControlHeader = backResponse.getHeader(HttpHeaders.CACHE_CONTROL);
+      if (cacheControlHeader != null) {
+        CacheControl cacheControl = new CacheControl().parse(cacheControlHeader);
+        if (cacheControl.isPublic()) {
+          publicCacheControl = true;
+          if (cacheControl.maxAge() > 0) {
+            maxAge = (long)cacheControl.maxAge() * 1000;
+          } else {
+            String dateHeader = backResponse.getHeader(HttpHeaders.DATE);
+            String expiresHeader = backResponse.getHeader(HttpHeaders.EXPIRES);
+            if (dateHeader != null && expiresHeader != null) {
+              maxAge = ParseUtils.parseHeaderDate(expiresHeader).getTime() - ParseUtils.parseHeaderDate(dateHeader).getTime();
+            }
+          }
+        }
+      }
+      this.maxAge = maxAge;
+      this.publicCacheControl = publicCacheControl;
+      this.etag = backResponse.getHeader(HttpHeaders.ETAG);
 
       frontResponse.setStatusCode(backResponse.statusCode());
       frontResponse.setStatusMessage(backResponse.statusMessage());
@@ -259,7 +316,7 @@ public class ProxyRequestImpl implements ProxyRequest {
           }
         }
       } else {
-        date = ParseUtils.parseWarningHeaderDate(dateHeader);
+        date = ParseUtils.parseHeaderDate(dateHeader);
       }
       if (date == null) {
         date = new Date();
@@ -274,7 +331,7 @@ public class ProxyRequestImpl implements ProxyRequest {
       List<String> warningHeaders = backResponse.headers().getAll("warning");
       if (warningHeaders.size() > 0) {
         warningHeaders = new ArrayList<>(warningHeaders);
-        Date dateInstant = ParseUtils.parseDateHeaderDate(dateHeader);
+        Date dateInstant = ParseUtils.parseHeaderDate(dateHeader);
         Iterator<String> i = warningHeaders.iterator();
         while (i.hasNext()) {
           String warningHeader = i.next();
@@ -296,10 +353,21 @@ public class ProxyRequestImpl implements ProxyRequest {
           frontResponse.headers().add(name, value);
         }
       });
+
+      return this;
+    }
+
+    @Override
+    public void cancel() {
+      checkSent();
+      sent = true;
+      backResponse.resume();
     }
 
     @Override
     public void send(Handler<AsyncResult<Void>> completionHandler) {
+      checkSent();
+      sent = true;
 
       // Determine chunked
       boolean chunked = false;

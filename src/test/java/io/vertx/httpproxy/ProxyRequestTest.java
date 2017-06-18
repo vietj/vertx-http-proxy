@@ -160,8 +160,8 @@ public class ProxyRequestTest extends ProxyTestBase {
     startHttpServer(ctx, proxyOptions, req -> {
       req.pause();
       vertx.setTimer(500, id1 -> {
-        ProxyRequest proxyReq = proxy.proxy(req);
-        proxyReq.send(backend, ctx.asyncAssertSuccess(resp -> {
+        ProxyRequest proxyReq = proxy.proxy(req, backend);
+        proxyReq.send(ctx.asyncAssertSuccess(resp -> {
           vertx.setTimer(500, id2 -> {
             resp.send(ctx.asyncAssertSuccess(v -> async.countDown()));
           });
@@ -196,9 +196,9 @@ public class ProxyRequestTest extends ProxyTestBase {
     HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpProxy proxy = HttpProxy.reverseProxy(backendClient);
     startHttpServer(ctx, proxyOptions, req -> {
-      ProxyRequest proxyReq = proxy.proxy(req);
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
       proxyReq.bodyFilter(filter::init);
-      proxyReq.send(backend, ctx.asyncAssertSuccess(resp -> resp.send(ctx.asyncAssertSuccess())));
+      proxyReq.send(ctx.asyncAssertSuccess(resp -> resp.send(ctx.asyncAssertSuccess())));
     });
     Async async = ctx.async();
     HttpClientRequest req = client.post(8080, "localhost", "/somepath", resp -> {
@@ -235,8 +235,8 @@ public class ProxyRequestTest extends ProxyTestBase {
     HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpProxy proxy = HttpProxy.reverseProxy(backendClient);
     startHttpServer(ctx, proxyOptions, req -> {
-      ProxyRequest proxyReq = proxy.proxy(req);
-      proxyReq.send(backend, ctx.asyncAssertSuccess(proxyResp -> {
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
+      proxyReq.send(ctx.asyncAssertSuccess(proxyResp -> {
         proxyResp.bodyFilter(filter::init);
         proxyResp.send(ctx.asyncAssertSuccess());
       }));
@@ -264,12 +264,12 @@ public class ProxyRequestTest extends ProxyTestBase {
     HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpProxy proxy = HttpProxy.reverseProxy(backendClient);
     startHttpServer(ctx, proxyOptions, req -> {
-      ProxyRequest proxyReq = proxy.proxy(req);
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
       MultiMap clientHeaders = proxyReq.headers();
       clientHeaders.add("proxy_header", "proxy_header_value");
       ctx.assertEquals("header_value", clientHeaders.get("header"));
       clientHeaders.remove("header");
-      proxyReq.send(backend, ctx.asyncAssertSuccess(proxyResp -> {
+      proxyReq.send(ctx.asyncAssertSuccess(proxyResp -> {
         MultiMap targetHeaders = proxyResp.headers();
         targetHeaders.add("proxy_header", "proxy_header_value");
         ctx.assertEquals("header_value", targetHeaders.get("header"));
@@ -372,8 +372,8 @@ public class ProxyRequestTest extends ProxyTestBase {
     HttpClient client = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpProxy proxy = HttpProxy.reverseProxy(client);
     startHttpServer(ctx, proxyOptions, req -> {
-      ProxyRequest proxyReq = proxy.proxy(req);
-      proxyReq.proxy(backend, ar -> {
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
+      proxyReq.proxy(ar -> {
         expect.handle(ar);
         async.complete();
       });
@@ -388,8 +388,8 @@ public class ProxyRequestTest extends ProxyTestBase {
     HttpClient client = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpProxy proxy = HttpProxy.reverseProxy(client);
     startHttpServer(ctx, proxyOptions, req -> {
-      ProxyRequest proxyReq = proxy.proxy(req);
-      proxyReq.proxy(backend, ar -> {
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
+      proxyReq.proxy(ar -> {
         expect.handle(ar);
         async.complete();
       });

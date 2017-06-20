@@ -158,7 +158,7 @@ public class ProxyRequestImpl implements ProxyRequest {
       resetClient();
       completionHandler.handle(Future.failedFuture(err));
     });
-    this.frontRequest.response().endHandler(v -> {
+    frontRequest.response().endHandler(v -> {
       if (stop() != null) {
         backRequest.reset();
         completionHandler.handle(Future.failedFuture("no-msg"));
@@ -361,6 +361,8 @@ public class ProxyRequestImpl implements ProxyRequest {
     public void cancel() {
       checkSent();
       sent = true;
+      frontResponse.headers().clear();
+      frontResponse.endHandler(null);
       backResponse.resume();
     }
 

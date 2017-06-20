@@ -288,6 +288,30 @@ public class ProxyRequestTest extends ProxyTestBase {
     }).putHeader("header", "header_value").end();
   }
 
+  @Test
+  public void testCancelResponse(TestContext ctx) throws Exception {
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      req.response().end("the-response");
+    });
+    HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    HttpProxy proxy = HttpProxy.reverseProxy(backendClient);
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
+      proxyReq.send(ctx.asyncAssertSuccess(proxyResp -> {
+        proxyResp.cancel();
+        req.response().end("another-response");
+      }));
+    });
+    HttpClient client = vertx.createHttpClient();
+    Async async = ctx.async();
+    client.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.bodyHandler(body -> {
+        ctx.assertEquals("another-response", body.toString());
+        async.complete();
+      });
+    });
+  }
+
   private static Buffer CHUNK;
 
   static {

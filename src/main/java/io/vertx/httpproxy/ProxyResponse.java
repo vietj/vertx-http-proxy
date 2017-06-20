@@ -57,7 +57,8 @@ public interface ProxyResponse {
   void send(Handler<AsyncResult<Void>> completionHandler);
 
   /**
-   * Cancels the proxy request, this will release the resources.
+   * Cancels the proxy request, this will release the resources and clear the headers of the
+   * wrapped {@link io.vertx.core.http.HttpServerResponse}.
    */
   void cancel();
 

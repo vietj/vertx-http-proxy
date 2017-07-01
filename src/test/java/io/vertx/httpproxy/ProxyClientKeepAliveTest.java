@@ -555,7 +555,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     Async latch = ctx.async();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       ctx.assertEquals(HttpMethod.HEAD, req.method());
-      req.response().end("content");
+      req.response().putHeader("content-length", "" + "content".length()).end();
     });
     startProxy(ctx, backend);
     HttpClient client = vertx.createHttpClient();

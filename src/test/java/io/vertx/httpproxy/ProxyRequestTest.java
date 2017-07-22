@@ -121,23 +121,30 @@ public class ProxyRequestTest extends ProxyTestBase {
   }
 
   @Test
-  public void testCloseProxyRequest(TestContext ctx) throws Exception {
-    testCloseChunkedProxyRequest(ctx, false);
+  public void testCloseFrontendRequest(TestContext ctx) throws Exception {
+    testCloseChunkedFrontendRequest(ctx, false);
   }
 
   @Test
-  public void testCloseChunkedProxyRequest(TestContext ctx) throws Exception {
-    testCloseChunkedProxyRequest(ctx, true);
+  public void testCloseChunkedFrontendRequest(TestContext ctx) throws Exception {
+    testCloseChunkedFrontendRequest(ctx, true);
   }
 
-  private void testCloseChunkedProxyRequest(TestContext ctx, boolean chunked) throws Exception {
+  private void testCloseChunkedFrontendRequest(TestContext ctx, boolean chunked) throws Exception {
     CountDownLatch latch = new CountDownLatch(1);
-    runHttpTest(ctx, req -> {
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       req.handler(buff -> {
         ctx.assertEquals("part", buff.toString());
         latch.countDown();
       });
-    }, ctx.asyncAssertFailure());
+    });
+    HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    HttpProxy proxy = HttpProxy.reverseProxy(backendClient);
+    Async async = ctx.async();
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
+      proxyReq.send(ctx.asyncAssertFailure(err -> async.complete()));
+    });
     HttpClient httpClient = vertx.createHttpClient();
     HttpClientRequest req = httpClient.get(8080, "localhost", "/somepath", resp -> {
       ctx.fail();

@@ -155,8 +155,9 @@ public class ProxyRequestImpl implements ProxyRequest {
     });
     requestPump = Pump.pump(bodyStream, backRequest);
     backRequest.exceptionHandler(err -> {
-      resetClient();
-      completionHandler.handle(Future.failedFuture(err));
+      if (resetClient()) {
+        completionHandler.handle(Future.failedFuture(err));
+      }
     });
     frontRequest.response().endHandler(v -> {
       if (stop() != null) {
@@ -191,7 +192,7 @@ public class ProxyRequestImpl implements ProxyRequest {
     return null;
   }
 
-  private void resetClient() {
+  private boolean resetClient() {
     HttpServerRequest request = stop();
     if (request != null) {
       HttpConnection conn = request.connection();
@@ -200,7 +201,9 @@ public class ProxyRequestImpl implements ProxyRequest {
       if (conn != null) {
         conn.close();
       }
+      return true;
     }
+    return false;
   }
 
   private void handle(HttpClientResponse backResponse, Handler<AsyncResult<ProxyResponse>> completionHandler) {

@@ -121,6 +121,41 @@ public class ProxyRequestTest extends ProxyTestBase {
   }
 
   @Test
+  public void testCloseFrontendResponse(TestContext ctx) {
+    testCloseFrontendResponse(ctx, false);
+  }
+
+  @Test
+  public void testCloseChunkedFrontendResponse(TestContext ctx) {
+    testCloseFrontendResponse(ctx, true);
+  }
+
+  private void testCloseFrontendResponse(TestContext ctx, boolean chunked) {
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      HttpServerResponse resp = req.response();
+      if (chunked) {
+        resp.setChunked(true);
+      } else {
+        resp.putHeader("content-length", "10000");
+      }
+      resp.write("part");
+    });
+    HttpClient backendClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+    HttpProxy proxy = HttpProxy.reverseProxy(backendClient);
+    Async async = ctx.async();
+    startHttpServer(ctx, proxyOptions, req -> {
+      ProxyRequest proxyReq = proxy.proxy(req, backend);
+      proxyReq.send(ctx.asyncAssertSuccess(resp -> resp.send(ctx.asyncAssertFailure(err -> async.complete()))));
+    });
+    HttpClient httpClient = vertx.createHttpClient();
+    httpClient.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.handler(buff -> {
+        resp.request().connection().close();
+      });
+    });
+  }
+
+  @Test
   public void testCloseFrontendRequest(TestContext ctx) throws Exception {
     testCloseChunkedFrontendRequest(ctx, false);
   }

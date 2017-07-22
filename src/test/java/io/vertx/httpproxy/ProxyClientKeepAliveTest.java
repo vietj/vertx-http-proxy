@@ -235,6 +235,40 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
   }
 
   @Test
+  public void testFrontendCloseResponse(TestContext ctx) {
+    testFrontendCloseResponse(ctx, false);
+  }
+
+  @Test
+  public void testFrontendCloseChunkedResponse(TestContext ctx) {
+    testBackendCloseResponse(ctx, true);
+  }
+
+  private void testFrontendCloseResponse(TestContext ctx, boolean chunked) {
+    Async async = ctx.async();
+    SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
+      HttpServerResponse resp = req.response();
+      if (chunked) {
+        resp.setChunked(true);
+      } else {
+        resp.putHeader("content-length", "10000");
+      }
+      resp.write("part");
+      resp.exceptionHandler(err -> {
+        async.complete();
+      });
+    });
+    startProxy(ctx, backend);
+    HttpClient client = vertx.createHttpClient();
+    client.getNow(8080, "localhost", "/", resp -> {
+      resp.handler(buff -> {
+        resp.request().connection().close();
+        System.out.println("closing");
+      });
+    });
+  }
+
+  @Test
   public void testBackendRepliesIncorrectHttpVersion(TestContext ctx) {
     Async latch = ctx.async();
     SocketAddress backend = startNetBackend(ctx, 8081, so -> {

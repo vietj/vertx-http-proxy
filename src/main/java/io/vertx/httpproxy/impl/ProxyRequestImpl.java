@@ -387,10 +387,18 @@ public class ProxyRequestImpl implements ProxyRequest {
         }
       }
 
+      frontResponse.exceptionHandler(err -> {
+        HttpServerRequest request = stop();
+        if (request != null) {
+          backRequest.reset();
+          completionHandler.handle(Future.failedFuture(err));
+        }
+      });
+
       backResponse.exceptionHandler(err -> {
         HttpServerRequest request = stop();
         if (request != null) {
-          request.response().close();
+          request.response().close(); // Should reset instead ????
           completionHandler.handle(Future.failedFuture(err));
         }
       });

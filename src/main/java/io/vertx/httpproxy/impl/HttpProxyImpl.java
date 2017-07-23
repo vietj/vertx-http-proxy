@@ -481,7 +481,7 @@ public class HttpProxyImpl implements HttpProxy {
         proxyReq.send(ar1 -> {
           if (ar1.succeeded()) {
             ProxyResponse proxyResp = ar1.result();
-            if (resource != null && (proxyResp.getStatusCode() == 200 || proxyResp.getStatusCode() == 304 )) {
+            if (resource != null && (proxyResp.statusCode() == 200 || proxyResp.statusCode() == 304 )) {
               if (resource.revalidate(proxyResp)) {
                 CachedHttpClientResponse cachedResp = resource.response();
                 proxyResp.set(cachedResp);
@@ -500,8 +500,8 @@ public class HttpProxyImpl implements HttpProxy {
 
             if (request.method() == HttpMethod.GET && proxyResp.publicCacheControl() && proxyResp.maxAge() > 0) {
               Resource res = new Resource(request.absoluteURI(),
-                  proxyResp.getStatusCode(),
-                  proxyResp.getStatusMessage(),
+                  proxyResp.statusCode(),
+                  proxyResp.statusMessage(),
                   proxyResp.headers(),
                   System.currentTimeMillis(),
                   proxyResp.maxAge());

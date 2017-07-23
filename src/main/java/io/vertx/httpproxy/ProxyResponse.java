@@ -9,7 +9,6 @@ import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.streams.ReadStream;
-import io.vertx.httpproxy.impl.CacheControl;
 
 import java.util.function.Function;
 
@@ -19,17 +18,14 @@ import java.util.function.Function;
 @VertxGen
 public interface ProxyResponse {
 
-  int getStatusCode();
+  int statusCode();
 
-  String getStatusMessage();
+  String statusMessage();
 
-  @CacheReturn
   boolean publicCacheControl();
 
-  @CacheReturn
   long maxAge();
 
-  @CacheReturn
   String etag();
 
   /**
@@ -41,8 +37,8 @@ public interface ProxyResponse {
   ProxyResponse bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
 
   /**
-   * Set the proxy response to use the {@code response}, this will update the values returned by {@link #getStatusCode()},
-   * {@link #getStatusMessage()}, {@link #headers()}, {@link #publicCacheControl()}, {@link #maxAge()}.
+   * Set the proxy response to use the {@code response}, this will update the values returned by {@link #statusCode()},
+   * {@link #statusMessage()}, {@link #headers()}, {@link #publicCacheControl()}, {@link #maxAge()}.
    *
    * @param response the response to use
    */

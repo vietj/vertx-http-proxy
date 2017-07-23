@@ -248,12 +248,12 @@ public class ProxyRequestImpl implements ProxyRequest {
     }
 
     @Override
-    public int getStatusCode() {
+    public int statusCode() {
       return frontResponse.getStatusCode();
     }
 
     @Override
-    public String getStatusMessage() {
+    public String statusMessage() {
       return frontResponse.getStatusMessage();
     }
 

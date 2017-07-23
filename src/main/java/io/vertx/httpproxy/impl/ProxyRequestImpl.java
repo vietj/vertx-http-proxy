@@ -33,6 +33,7 @@ import java.util.function.Function;
 public class ProxyRequestImpl implements ProxyRequest {
 
   private HttpServerRequest frontRequest;
+  private HttpServerResponse frontResponse;
 
   private Function<HttpServerRequest, HttpClientRequest> provider;
   private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
@@ -152,6 +153,14 @@ public class ProxyRequestImpl implements ProxyRequest {
     bodyStream.endHandler(v -> {
       requestPump = null;
       backRequest.end();
+      if (frontResponse == null) {
+        frontRequest.response().exceptionHandler(err -> {
+          if (stop() != null) {
+            backRequest.reset();
+            completionHandler.handle(Future.failedFuture(err));
+          }
+        });
+      }
     });
     requestPump = Pump.pump(bodyStream, backRequest);
     backRequest.exceptionHandler(err -> {
@@ -159,12 +168,13 @@ public class ProxyRequestImpl implements ProxyRequest {
         completionHandler.handle(Future.failedFuture(err));
       }
     });
-    frontRequest.response().endHandler(v -> {
+    frontRequest.exceptionHandler(err -> {
       if (stop() != null) {
         backRequest.reset();
-        completionHandler.handle(Future.failedFuture("no-msg"));
+        completionHandler.handle(Future.failedFuture(err));
       }
     });
+
     requestPump.start();
     bodyStream.resume();
   }
@@ -211,8 +221,9 @@ public class ProxyRequestImpl implements ProxyRequest {
       return;
     }
     backResponse.pause();
-    HttpServerResponse frontResponse = frontRequest.response();
-    ProxyResponseImpl response = new ProxyResponseImpl(frontResponse);
+    frontResponse = frontRequest.response();
+    frontResponse.exceptionHandler(null); // Might have been set previously
+    ProxyResponseImpl response = new ProxyResponseImpl();
     response.set(backResponse);
     completionHandler.handle(Future.succeededFuture(response));
   }
@@ -220,15 +231,13 @@ public class ProxyRequestImpl implements ProxyRequest {
   private class ProxyResponseImpl implements ProxyResponse {
 
     private HttpClientResponse backResponse;
-    private final HttpServerResponse frontResponse;
     private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
     private long maxAge;
     private String etag;
     private boolean publicCacheControl;
     private boolean sent;
 
-    public ProxyResponseImpl(HttpServerResponse frontResponse) {
-      this.frontResponse = frontResponse;
+    public ProxyResponseImpl() {
     }
 
     @Override
@@ -277,7 +286,7 @@ public class ProxyRequestImpl implements ProxyRequest {
     public ProxyResponse set(HttpClientResponse backResponse) {
       checkSent();
 
-      this.frontResponse.headers().clear();
+      frontResponse.headers().clear();
       this.backResponse = backResponse;
 
       long maxAge = -1;

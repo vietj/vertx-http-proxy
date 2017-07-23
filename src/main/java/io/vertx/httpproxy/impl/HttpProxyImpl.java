@@ -3,6 +3,7 @@ package io.vertx.httpproxy.impl;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
+import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientRequest;
@@ -373,7 +374,10 @@ public class HttpProxyImpl implements HttpProxy {
         public void end() {
           CachedHttpClientResponse resp = response();
           responseHandler.handle(resp);
-          resp.send();
+          // Need a tick
+          Vertx.currentContext().runOnContext(v -> {
+            resp.send();
+          });
         }
         @Override
         public HttpClientRequest setTimeout(long timeoutMs) {

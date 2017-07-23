@@ -178,7 +178,9 @@ public class ProxyRequestTest extends ProxyTestBase {
     Async async = ctx.async();
     startHttpServer(ctx, proxyOptions, req -> {
       ProxyRequest proxyReq = proxy.proxy(req, backend);
-      proxyReq.send(ctx.asyncAssertFailure(err -> async.complete()));
+      proxyReq.send(ctx.asyncAssertFailure(err -> {
+        async.complete();
+      }));
     });
     HttpClient httpClient = vertx.createHttpClient();
     HttpClientRequest req = httpClient.get(8080, "localhost", "/somepath", resp -> {

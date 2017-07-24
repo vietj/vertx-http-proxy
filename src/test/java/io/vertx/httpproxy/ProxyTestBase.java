@@ -53,7 +53,7 @@ public class ProxyTestBase {
     HttpClient proxyClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
     HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions(proxyOptions));
     HttpProxy proxy = HttpProxy.reverseProxy(proxyClient);
-    proxy.targetSelector(selector);
+    proxy.selector(selector);
     proxyServer.requestHandler(proxy);
     Async async1 = ctx.async();
     proxyServer.listen(ctx.asyncAssertSuccess(p -> async1.complete()));

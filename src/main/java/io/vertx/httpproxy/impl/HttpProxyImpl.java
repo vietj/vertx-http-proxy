@@ -59,7 +59,7 @@ public class HttpProxyImpl implements HttpProxy {
   }
 
   @Override
-  public HttpProxy targetSelector(Function<HttpServerRequest, Future<SocketAddress>> selector) {
+  public HttpProxy selector(Function<HttpServerRequest, Future<SocketAddress>> selector) {
     targetSelector = selector;
     return this;
   }

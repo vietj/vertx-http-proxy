@@ -28,7 +28,7 @@ public interface HttpProxy extends Handler<HttpServerRequest> {
   HttpProxy target(int port, String host);
 
   @Fluent
-  HttpProxy targetSelector(Function<HttpServerRequest, Future<SocketAddress>> selector);
+  HttpProxy selector(Function<HttpServerRequest, Future<SocketAddress>> selector);
 
   void handle(HttpServerRequest request);
 

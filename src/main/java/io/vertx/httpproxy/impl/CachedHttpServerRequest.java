@@ -15,6 +15,7 @@ import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.SocketAddress;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 import javax.security.cert.X509Certificate;
 
 /**
@@ -80,6 +81,11 @@ class CachedHttpServerRequest implements HttpServerRequest {
   @Override
   public boolean isSSL() {
     return request.isSSL();
+  }
+
+  @Override
+  public SSLSession sslSession() {
+    return request.sslSession();
   }
 
   @Override

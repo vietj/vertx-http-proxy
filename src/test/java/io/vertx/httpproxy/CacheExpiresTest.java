@@ -14,7 +14,6 @@ import org.junit.Test;
 
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -134,7 +133,7 @@ public class CacheExpiresTest extends ProxyTestBase {
           .putHeader(HttpHeaders.DATE, ParseUtils.formatHttpDate(now))
           .end("content");
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     client.getNow(8080, "localhost", "/", resp -> {
       ctx.assertEquals(200, resp.statusCode());
       resp.bodyHandler(buff -> {
@@ -190,7 +189,7 @@ public class CacheExpiresTest extends ProxyTestBase {
           ctx.fail();
       }
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     client.getNow(8080, "localhost", "/", resp1 -> {
       ctx.assertEquals(200, resp1.statusCode());
       resp1.bodyHandler(buff -> {

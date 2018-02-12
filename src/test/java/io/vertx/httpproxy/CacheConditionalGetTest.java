@@ -1,7 +1,6 @@
 package io.vertx.httpproxy;
 
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
-import io.vertx.core.MultiMap;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.net.impl.SocketAddressImpl;
@@ -15,7 +14,6 @@ import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -53,7 +51,7 @@ public class CacheConditionalGetTest extends ProxyTestBase {
                 .withHeader("Last-Modified", ParseUtils.formatHttpDate(new Date(now - 5000)))
                 .withHeader("Expires", ParseUtils.formatHttpDate(new Date(now + 5000)))
                 .withBody("content")));
-    startProxy(ctx, new SocketAddressImpl(8081, "localhost"));
+    startProxy(new SocketAddressImpl(8081, "localhost"));
     Async latch = ctx.async();
     client.getNow(8080, "localhost", "/img.jpg", resp1 -> {
       ctx.assertEquals(200, resp1.statusCode());

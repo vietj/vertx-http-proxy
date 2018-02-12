@@ -1,29 +1,20 @@
 package io.vertx.httpproxy;
 
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClient;
-import io.vertx.core.http.HttpClientOptions;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.http.HttpConnection;
-import io.vertx.core.http.HttpHeaders;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.http.HttpServerResponse;
-import io.vertx.core.http.HttpVersion;
+import io.vertx.core.http.*;
 import io.vertx.core.net.NetClient;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.streams.WriteStream;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
-import io.vertx.httpproxy.impl.ParseUtils;
 import org.junit.Test;
 
-import java.util.Date;
+import java.io.Closeable;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -59,7 +50,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       ctx.assertEquals("localhost:8081", req.host());
       req.response().end("Hello World");
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     Async async = ctx.async();
     client.getNow(8080, "localhost", "/somepath", resp -> {
@@ -84,7 +75,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         async.complete();
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
       ctx.assertEquals(200, resp.statusCode());
@@ -105,7 +96,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         }
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     AtomicBoolean responseReceived = new AtomicBoolean();
     HttpClientRequest req = client.post(8080, "localhost", "/", resp -> {
@@ -137,7 +128,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         }
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     HttpClientRequest req = client.post(8080, "localhost", "/", resp -> ctx.fail());
     req.putHeader("Content-Length", "2048");
@@ -161,7 +152,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         async.complete();
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     HttpClientRequest req = client.post(8080, "localhost", "/", resp -> ctx.fail());
     req.end(Buffer.buffer(new byte[1024]));
@@ -185,7 +176,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         }
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     HttpClientRequest req = client.post(8080, "localhost", "/");
     Async async = ctx.async();
@@ -221,7 +212,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         resp.close();
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     Async async = ctx.async();
     client.getNow(8080, "localhost", "/", resp -> {
@@ -258,7 +249,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         async.complete();
       });
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.getNow(8080, "localhost", "/", resp -> {
       resp.handler(buff -> {
@@ -275,7 +266,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       so.write("HTTP/1.2 200 OK\r\n\r\n");
       so.close();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.getNow(8080, "localhost", "/", resp -> {
       ctx.assertEquals(502, resp.statusCode());
@@ -294,7 +285,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
           .putHeader("warning", "199 Miscellaneous warning \"Tue, 15 Nov 1994 08:12:31 GMT\"")
         .end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.getNow(8080, "localhost", "/", resp -> {
       ctx.assertNotNull(resp.getHeader("date"));
@@ -312,7 +303,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
 //          .putHeader("warning", "199 Miscellaneous warning \"Tue, 15 Nov 1994 08:12:31 GMT\"")
           .end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.getNow(8080, "localhost", "/", resp -> {
       ctx.assertNotNull(resp.getHeader("date"));
@@ -329,7 +320,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
           .putHeader("warning", "199 Miscellaneous warning \"" + expected + "\"")
           .end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.getNow(8080, "localhost", "/", resp -> {
       ctx.assertEquals(expected, resp.getHeader("date"));
@@ -355,7 +346,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       resp.setChunked(true);
       streamChunkedBody(resp, num);
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient(new HttpClientOptions().setProtocolVersion(version));
     StringBuilder sb = new StringBuilder();
     for (int i = 0;i < num;i++) {
@@ -408,7 +399,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       });
       req.response().end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
     });
@@ -422,7 +413,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       ctx.fail();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     NetClient client = vertx.createNetClient();
     client.connect(8080, "localhost", ctx.asyncAssertSuccess(so -> {
       Buffer resp = Buffer.buffer();
@@ -444,7 +435,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       ctx.assertEquals(uri, req.uri());
       req.response().end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.getNow(8080, "localhost", "" + uri, resp -> {
       ctx.assertEquals(200, resp.statusCode());
@@ -475,7 +466,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       });
     });
     clientOptions.setMaxInitialLineLength(5000);
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient(/*new HttpClientOptions().setProtocolVersion(HttpVersion.HTTP_1_0)*/);
     client.getNow(8080, "localhost", "/somepath", resp -> {
       ctx.assertEquals(200, resp.statusCode());
@@ -487,40 +478,34 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
   }
 
   @Test
-  public void testRequestIllegalTransferEncoding(TestContext ctx) throws Exception {
+  public void testRequestIllegalTransferEncoding1(TestContext ctx) throws Exception {
     checkBadRequest(ctx,
         "POST /somepath HTTP/1.1\r\n" +
         "transfer-encoding: identity\r\n" +
         "connection: close\r\n" +
-        "\r\n");
-    checkBadRequest(ctx,
+        "\r\n",
         "POST /somepath HTTP/1.1\r\n" +
             "transfer-encoding: chunked, identity\r\n" +
             "connection: close\r\n" +
-            "\r\n");
-    checkBadRequest(ctx,
+            "\r\n",
         "POST /somepath HTTP/1.1\r\n" +
             "transfer-encoding: identity, chunked\r\n" +
             "connection: close\r\n" +
-            "\r\n");
-    checkBadRequest(ctx,
+            "\r\n",
         "POST /somepath HTTP/1.1\r\n" +
             "transfer-encoding: identity\r\n" +
             "transfer-encoding: chunked\r\n" +
             "connection: close\r\n" +
-            "\r\n");
-    checkBadRequest(ctx,
+            "\r\n",
         "POST /somepath HTTP/1.1\r\n" +
             "transfer-encoding: chunked\r\n" +
             "transfer-encoding: identity\r\n" +
             "connection: close\r\n" +
-            "\r\n");
-    checkBadRequest(ctx,
+            "\r\n",
         "POST /somepath HTTP/1.1\r\n" +
             "transfer-encoding: other, chunked\r\n" +
             "connection: close\r\n" +
-            "\r\n");
-    checkBadRequest(ctx,
+            "\r\n",
         "POST /somepath HTTP/1.1\r\n" +
             "transfer-encoding: other\r\n" +
             "transfer-encoding: chunked\r\n" +
@@ -528,24 +513,30 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
             "\r\n");
   }
 
-  private void checkBadRequest(TestContext ctx, String request) throws Exception {
+  private void checkBadRequest(TestContext ctx, String... requests) throws Exception {
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       ctx.fail();
     });
-    Async latch = ctx.async();
-    startProxy(ctx, backend);
-    NetClient client = vertx.createNetClient();
-    client.connect(8080, "localhost", ctx.asyncAssertSuccess(so -> {
-      Buffer resp = Buffer.buffer();
-      so.handler(buff -> {
-        resp.appendBuffer(buff);
-        if (resp.toString().startsWith("HTTP/1.1 400 Bad Request\r\n")) {
-          latch.complete();
-        }
-      });
-      so.write(request);
-    }));
-    latch.awaitSuccess(10000);
+    startProxy(backend);
+    for (String request : requests) {
+      Async latch = ctx.async();
+      NetClient client = vertx.createNetClient();
+      try {
+        client.connect(8080, "localhost", ctx.asyncAssertSuccess(so -> {
+          Buffer resp = Buffer.buffer();
+          so.handler(buff -> {
+            resp.appendBuffer(buff);
+            if (resp.toString().startsWith("HTTP/1.1 400 Bad Request\r\n")) {
+              latch.complete();
+            }
+          });
+          so.write(request);
+        }));
+        latch.awaitSuccess(10000);
+      } finally {
+        client.close();
+      }
+    }
   }
 
   @Test
@@ -558,8 +549,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
         "A\r\n" +
         "0123456789\r\n" +
         "0\r\n" +
-        "\r\n");
-    checkBadResponse(ctx, "" +
+        "\r\n", "" +
         "HTTP/1.1 200 OK\r\n" +
         "Transfer-Encoding: other\r\n" +
         "Transfer-Encoding: chunked\r\n" +
@@ -579,7 +569,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       ctx.assertEquals("FOO", req.rawMethod());
       req.response().end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.request(HttpMethod.OTHER, 8080, "localhost", "/", resp -> latch.complete()).setRawMethod("FOO").end();
   }
@@ -591,7 +581,7 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       ctx.assertEquals(HttpMethod.HEAD, req.method());
       req.response().putHeader("content-length", "" + "content".length()).end();
     });
-    startProxy(ctx, backend);
+    startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     client.request(HttpMethod.HEAD, 8080, "localhost", "/", resp -> {
       ctx.assertEquals("" + ("content".length()), resp.getHeader("content-length"));
@@ -602,27 +592,35 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     }).end();
   }
 
-  private void checkBadResponse(TestContext ctx, String response) throws Exception {
+  private void checkBadResponse(TestContext ctx, String... responses) throws Exception {
+    AtomicReference<String> responseBody = new AtomicReference<>();
     SocketAddress backend = startNetBackend(ctx, 8081, so -> {
       Buffer body = Buffer.buffer();
       so.handler(buff -> {
         body.appendBuffer(buff);
         if (body.toString().endsWith("\r\n\r\n")) {
-          so.write(response);
+          System.out.println(body.toString());
+          so.write(responseBody.get());
         }
       });
     });
-    Async latch = ctx.async();
-    startProxy(ctx, backend);
-    HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "/somepath", resp -> {
-      ctx.assertEquals(501, resp.statusCode());
-      resp.bodyHandler(body -> {
-        ctx.assertEquals("", body.toString());
-        latch.complete();
-      });
-    });
-    latch.awaitSuccess(10000);
+    for (String response : responses) {
+      responseBody.set(response);
+      Async latch = ctx.async();
+      HttpClient client = vertx.createHttpClient();
+      try (Closeable proxy = startProxy(backend)) {
+        client.get(8080, "localhost", "/somepath", resp -> {
+          ctx.assertEquals(501, resp.statusCode());
+          resp.bodyHandler(body -> {
+            ctx.assertEquals("", body.toString());
+            latch.complete();
+          });
+        }).exceptionHandler(ctx::fail).end();
+        latch.awaitSuccess(10000);
+      } finally {
+        client.close();
+      }
+    }
   }
 
   private void streamChunkedBody(WriteStream<Buffer> stream, int num) {

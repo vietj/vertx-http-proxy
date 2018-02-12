@@ -1,5 +1,6 @@
 package io.vertx.httpproxy;
 
+import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -19,6 +20,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.runner.RunWith;
 
+import java.io.Closeable;
+import java.util.concurrent.*;
 import java.util.function.Function;
 
 /**
@@ -45,19 +48,49 @@ public class ProxyTestBase {
     vertx.close(context.asyncAssertSuccess());
   }
 
-  protected void startProxy(TestContext ctx, SocketAddress backend) {
-    startProxy(ctx, req -> Future.succeededFuture(backend));
+  protected Closeable startProxy(SocketAddress backend) {
+    return startProxy(req -> Future.succeededFuture(backend));
   }
 
-  protected void startProxy(TestContext ctx, Function<HttpServerRequest, Future<SocketAddress>> selector) {
-    HttpClient proxyClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
-    HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions(proxyOptions));
-    HttpProxy proxy = HttpProxy.reverseProxy(proxyClient);
-    proxy.selector(selector);
-    proxyServer.requestHandler(proxy);
-    Async async1 = ctx.async();
-    proxyServer.listen(ctx.asyncAssertSuccess(p -> async1.complete()));
-    async1.awaitSuccess();
+  protected Closeable startProxy(Function<HttpServerRequest, Future<SocketAddress>> selector) {
+    CompletableFuture<Closeable> res = new CompletableFuture<>();
+    vertx.deployVerticle(new AbstractVerticle() {
+      @Override
+      public void start(Future<Void> startFuture) {
+        HttpClient proxyClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
+        HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions(proxyOptions));
+        HttpProxy proxy = HttpProxy.reverseProxy(proxyClient);
+        proxy.selector(selector);
+        proxyServer.requestHandler(proxy);
+        proxyServer.listen(ar -> startFuture.handle(ar.mapEmpty()));
+      }
+    }, ar -> {
+      if (ar.succeeded()) {
+        String id = ar.result();
+        res.complete(() -> {
+          CountDownLatch latch = new CountDownLatch(1);
+          vertx.undeploy(id, ar2 -> latch.countDown());
+          try {
+            latch.await(10, TimeUnit.SECONDS);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+          }
+        });
+      } else {
+        res.completeExceptionally(ar.cause());
+      }
+    });
+    try {
+      return res.get(10, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError(e);
+    } catch (ExecutionException e) {
+      throw new AssertionError(e.getMessage());
+    } catch (TimeoutException e) {
+      throw new AssertionError(e);
+    }
   }
 
   protected void startHttpServer(TestContext ctx, HttpServerOptions options, Handler<HttpServerRequest> handler) {

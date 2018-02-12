@@ -77,7 +77,7 @@ public class CacheExpires2Test extends ProxyTestBase {
                 .withHeader("Date", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis())))
                 .withHeader("Expires", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis() + 5000)))
                 .withBody("content2")));
-    startProxy(ctx, new SocketAddressImpl(8081, "localhost"));
+    startProxy(new SocketAddressImpl(8081, "localhost"));
     Async latch = ctx.async();
     client.getNow(8080, "localhost", "/img.jpg", resp1 -> {
       ctx.assertEquals(200, resp1.statusCode());
@@ -146,7 +146,7 @@ public class CacheExpires2Test extends ProxyTestBase {
                 .withHeader("etag", "tag1")
                 .withHeader("Date", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis())))
                 .withHeader("Expires", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis() + 5000)))));
-    startProxy(ctx, new SocketAddressImpl(8081, "localhost"));
+    startProxy(new SocketAddressImpl(8081, "localhost"));
     Async latch = ctx.async();
     client.getNow(8080, "localhost", "/img.jpg", resp1 -> {
       ctx.assertEquals(200, resp1.statusCode());
@@ -208,7 +208,7 @@ public class CacheExpires2Test extends ProxyTestBase {
                 .withHeader("ETag", "tag0")
                 .withHeader("Date", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis())))
                 .withHeader("Expires", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis() + 5000)))));
-    startProxy(ctx, new SocketAddressImpl(8081, "localhost"));
+    startProxy(new SocketAddressImpl(8081, "localhost"));
     Async latch = ctx.async();
     client.getNow(8080, "localhost", "/img.jpg", resp1 -> {
       ctx.assertEquals(200, resp1.statusCode());
@@ -253,7 +253,7 @@ public class CacheExpires2Test extends ProxyTestBase {
                 .withHeader("ETag", "tag0")
                 .withHeader("Date", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis())))
                 .withHeader("Expires", ParseUtils.formatHttpDate(new Date(System.currentTimeMillis() + 5000)))));
-    startProxy(ctx, new SocketAddressImpl(8081, "localhost"));
+    startProxy(new SocketAddressImpl(8081, "localhost"));
     Async latch = ctx.async();
     client.headNow(8080, "localhost", "/img.jpg", resp1 -> {
       ctx.assertEquals(200, resp1.statusCode());

@@ -2,17 +2,13 @@ package io.vertx.httpproxy;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
-import io.netty.channel.unix.Socket;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import io.netty.util.internal.logging.Log4JLoggerFactory;
 import io.netty.util.internal.logging.Slf4JLoggerFactory;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.net.SocketAddress;
-import io.vertx.core.net.impl.SocketAddressImpl;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>

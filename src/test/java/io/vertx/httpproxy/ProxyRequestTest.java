@@ -13,7 +13,9 @@ import io.vertx.core.http.HttpVersion;
 import io.vertx.core.net.NetClient;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.SocketAddress;
+import io.vertx.core.streams.Pipe;
 import io.vertx.core.streams.ReadStream;
+import io.vertx.core.streams.WriteStream;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import org.junit.Test;
@@ -459,6 +461,12 @@ public class ProxyRequestTest extends ProxyTestBase {
     }
 
     @Override
+    public ReadStream<Buffer> fetch(long amount) {
+      stream.fetch(amount);
+      return this;
+    }
+
+    @Override
     public ReadStream<Buffer> exceptionHandler(Handler<Throwable> handler) {
       exceptionHandler = handler;
       return this;
@@ -474,6 +482,21 @@ public class ProxyRequestTest extends ProxyTestBase {
     public ReadStream<Buffer> endHandler(Handler<Void> handler) {
       endHandler = handler;
       return this;
+    }
+
+    @Override
+    public Pipe<Buffer> pipe() {
+      return stream.pipe();
+    }
+
+    @Override
+    public void pipeTo(WriteStream<Buffer> dst) {
+      stream.pipeTo(dst);
+    }
+
+    @Override
+    public void pipeTo(WriteStream<Buffer> dst, Handler<AsyncResult<Void>> handler) {
+      stream.pipeTo(dst, handler);
     }
   }
 

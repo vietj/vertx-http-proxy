@@ -3,14 +3,7 @@ package io.vertx.httpproxy.impl;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpConnection;
-import io.vertx.core.http.HttpFrame;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpServerFileUpload;
-import io.vertx.core.http.HttpServerRequest;
-import io.vertx.core.http.HttpServerResponse;
-import io.vertx.core.http.HttpVersion;
-import io.vertx.core.http.ServerWebSocket;
+import io.vertx.core.http.*;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.SocketAddress;
 
@@ -55,6 +48,11 @@ class CachedHttpServerRequest implements HttpServerRequest {
       }
     }
     return this;
+  }
+
+  @Override
+  public HttpServerRequest fetch(long amount) {
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -111,6 +109,11 @@ class CachedHttpServerRequest implements HttpServerRequest {
   @Override
   public String host() {
     return request.host();
+  }
+
+  @Override
+  public long bytesRead() {
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -210,6 +213,11 @@ class CachedHttpServerRequest implements HttpServerRequest {
 
   @Override
   public HttpConnection connection() {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public HttpServerRequest streamPriorityHandler(Handler<StreamPriority> handler) {
     throw new UnsupportedOperationException();
   }
 }

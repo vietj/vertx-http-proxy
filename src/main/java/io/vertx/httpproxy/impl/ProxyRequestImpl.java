@@ -90,6 +90,16 @@ public class ProxyRequestImpl implements ProxyRequest {
     return headers;
   }
 
+  @Override
+  public String path() {
+    return frontRequest.path();
+  }
+
+  @Override
+  public String method() {
+    return frontRequest.method().toString();
+  }
+
   private void copyHeaders(MultiMap to) {
     // Set headers, don't copy host, as HttpClient will set it
     for (Map.Entry<String, String> header : frontRequest.headers()) {

@@ -26,6 +26,10 @@ public interface ProxyRequest {
    */
   MultiMap headers();
 
+  String path();
+
+  String method();
+
   @Fluent
   ProxyRequest bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
 

@@ -35,6 +35,7 @@ public class HttpProxyImpl implements HttpProxy {
 
   private final HttpClient client;
   private Function<HttpServerRequest, Future<SocketAddress>> targetSelector = req -> Future.failedFuture("No target available");
+  private Function<ProxyRequest, Future<ProxyRequest>> requestTransformer = req -> Future.succeededFuture(req); // default to no-op
   private final Map<String, Resource> cache = new HashMap<>();
 
 
@@ -63,6 +64,13 @@ public class HttpProxyImpl implements HttpProxy {
     targetSelector = selector;
     return this;
   }
+
+  @Override
+  public HttpProxy requestTransformer(Function<ProxyRequest, Future<ProxyRequest>> filter) {
+    requestTransformer = filter;
+    return this;
+  }
+
 
   private class Resource implements Function<ReadStream<Buffer>, ReadStream<Buffer>> {
 
@@ -472,11 +480,13 @@ public class HttpProxyImpl implements HttpProxy {
     fut.setHandler(ar -> {
       if (ar.succeeded()) {
         SocketAddress target = ar.result();
-        ProxyRequestImpl proxyReq = new ProxyRequestImpl(client, target, request);
+        ProxyRequest proxyReq = new ProxyRequestImpl(client, target, request);
 
         if (resource != null && resource.etag != null) {
           proxyReq.headers().set(HttpHeaders.IF_NONE_MATCH, resource.etag);
         }
+
+        proxyReq = requestTransformer.apply(proxyReq).result();
 
         proxyReq.send(ar1 -> {
           if (ar1.succeeded()) {

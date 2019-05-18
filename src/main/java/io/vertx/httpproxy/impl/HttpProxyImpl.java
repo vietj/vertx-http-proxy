@@ -35,7 +35,8 @@ public class HttpProxyImpl implements HttpProxy {
 
   private final HttpClient client;
   private Function<HttpServerRequest, Future<SocketAddress>> targetSelector = req -> Future.failedFuture("No target available");
-  private Function<ProxyRequest, Future<ProxyRequest>> requestTransformer = req -> Future.succeededFuture(req); // default to no-op
+  private Function<ProxyRequest, Future<ProxyRequest>> proxyRequestTransformer = req -> Future.succeededFuture(req); // default to no-op
+  private Function<ProxyResponse, Future<ProxyResponse>> proxyResponseTransformer = req -> Future.succeededFuture(req); // default to no-op
   private final Map<String, Resource> cache = new HashMap<>();
 
 
@@ -66,12 +67,17 @@ public class HttpProxyImpl implements HttpProxy {
   }
 
   @Override
-  public HttpProxy requestTransformer(Function<ProxyRequest, Future<ProxyRequest>> filter) {
-    requestTransformer = filter;
+  public HttpProxy proxyRequestTransformer(Function<ProxyRequest, Future<ProxyRequest>> filter) {
+    proxyRequestTransformer = filter;
     return this;
   }
 
-
+  @Override
+  public HttpProxy proxyResponseTransformer(Function<ProxyResponse, Future<ProxyResponse>> filter) {
+    proxyResponseTransformer = filter;
+    return this;
+  }
+  
   private class Resource implements Function<ReadStream<Buffer>, ReadStream<Buffer>> {
 
     private final String absoluteUri;
@@ -478,20 +484,51 @@ public class HttpProxyImpl implements HttpProxy {
     request.pause();
     Future<SocketAddress> fut = targetSelector.apply(request);
     fut.setHandler(ar -> {
-      if (ar.succeeded()) {
-        SocketAddress target = ar.result();
-        ProxyRequest proxyReq = new ProxyRequestImpl(client, target, request);
+      
+      if (ar.failed()) {
+        request.resume();
+        request.response().setStatusCode(404).end();
+        return;
+      }
+      
+      SocketAddress target = ar.result();
+      ProxyRequest proxyReqOriginal = new ProxyRequestImpl(client, target, request);
 
-        if (resource != null && resource.etag != null) {
-          proxyReq.headers().set(HttpHeaders.IF_NONE_MATCH, resource.etag);
+      if (resource != null && resource.etag != null) {
+        proxyReqOriginal.headers().set(HttpHeaders.IF_NONE_MATCH, resource.etag);
+      }
+
+      // Transform incoming request
+      proxyRequestTransformer.apply(proxyReqOriginal).setHandler(arp -> {
+
+        if (arp.failed()) {
+          request.resume();
+          request.response().setStatusCode(500).end();
+          return;
         }
-
-        proxyReq = requestTransformer.apply(proxyReq).result();
-
+  
+        // Send request to backend
+        ProxyRequest proxyReq = arp.result();
         proxyReq.send(ar1 -> {
-          if (ar1.succeeded()) {
-            ProxyResponse proxyResp = ar1.result();
-            if (resource != null && (proxyResp.statusCode() == 200 || proxyResp.statusCode() == 304 )) {
+
+          if (ar1.failed()) {
+            request.resume();
+            request.response().setStatusCode(500).end();
+            return;
+          }
+
+          // Transform backend response
+          proxyResponseTransformer.apply(ar1.result()).setHandler(arr -> {
+            
+            if (arr.failed()) {
+              request.resume();
+              request.response().setStatusCode(500).end();
+              return;
+            }
+            
+            ProxyResponse proxyResp = arr.result();
+            
+            if (resource != null && (proxyResp.statusCode() == 200 || proxyResp.statusCode() == 304)) {
               if (resource.revalidate(proxyResp)) {
                 CachedHttpClientResponse cachedResp = resource.response();
                 proxyResp.set(cachedResp);
@@ -517,15 +554,14 @@ public class HttpProxyImpl implements HttpProxy {
                   proxyResp.maxAge());
               proxyResp.bodyFilter(res);
             }
+            
+            // Send response back to clients
             proxyResp.send(ar2 -> {
               // Done
             });
-          }
+          });
         });
-      } else {
-        request.resume();
-        request.response().setStatusCode(404).end();
-      }
+      });
     });
   }
 }

@@ -31,7 +31,10 @@ public interface HttpProxy extends Handler<HttpServerRequest> {
   HttpProxy selector(Function<HttpServerRequest, Future<SocketAddress>> selector);
 
   @Fluent
-  HttpProxy requestTransformer(Function<ProxyRequest, Future<ProxyRequest>> filter);
+  HttpProxy proxyRequestTransformer(Function<ProxyRequest, Future<ProxyRequest>> filter);
+
+  @Fluent
+  HttpProxy proxyResponseTransformer(Function<ProxyResponse, Future<ProxyResponse>> filter);
 
   void handle(HttpServerRequest request);
 

@@ -1,23 +1,14 @@
 package io.vertx.httpproxy.impl;
 
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.MultiMap;
-import io.vertx.core.Vertx;
+import io.vertx.core.*;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClient;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.http.HttpClientResponse;
-import io.vertx.core.http.HttpConnection;
-import io.vertx.core.http.HttpFrame;
-import io.vertx.core.http.HttpHeaders;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpServerRequest;
-import io.vertx.core.http.HttpVersion;
+import io.vertx.core.http.*;
 import io.vertx.core.net.NetSocket;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.core.net.impl.SocketAddressImpl;
+import io.vertx.core.streams.Pipe;
 import io.vertx.core.streams.ReadStream;
+import io.vertx.core.streams.WriteStream;
 import io.vertx.httpproxy.HttpProxy;
 import io.vertx.httpproxy.ProxyRequest;
 import io.vertx.httpproxy.ProxyResponse;
@@ -129,6 +120,13 @@ public class HttpProxyImpl implements HttpProxy {
           s.resume();
           return this;
         }
+
+        @Override
+        public ReadStream<Buffer> fetch(long amount) {
+          s.fetch(amount);
+          return this;
+        }
+
         @Override
         public ReadStream<Buffer> endHandler(Handler<Void> endHandler) {
           if (endHandler != null) {
@@ -141,6 +139,21 @@ public class HttpProxyImpl implements HttpProxy {
           }
           return this;
         }
+
+        @Override
+        public Pipe<Buffer> pipe() {
+          return s.pipe();
+        }
+
+        @Override
+        public void pipeTo(WriteStream<Buffer> dst) {
+          s.pipeTo(dst);
+        }
+
+        @Override
+        public void pipeTo(WriteStream<Buffer> dst, Handler<AsyncResult<Void>> handler) {
+          s.pipeTo(dst, handler);
+        }
       };
     }
 
@@ -148,6 +161,12 @@ public class HttpProxyImpl implements HttpProxy {
       return new CachedHttpClientResponse() {
         Handler<Buffer> dataHandler;
         Handler<Void> endHandler;
+
+        @Override
+        public HttpClientResponse fetch(long amount) {
+          throw new UnsupportedOperationException();
+        }
+
         @Override
         public HttpClientResponse resume() {
           return this;
@@ -222,6 +241,12 @@ public class HttpProxyImpl implements HttpProxy {
         public HttpClientRequest request() {
           throw new UnsupportedOperationException();
         }
+
+        @Override
+        public HttpClientResponse streamPriorityHandler(Handler<StreamPriority> handler) {
+          throw new UnsupportedOperationException();
+        }
+
         @Override
         public void send() {
           if (dataHandler != null) {
@@ -266,10 +291,32 @@ public class HttpProxyImpl implements HttpProxy {
         public HttpClientRequest resume() {
           return this;
         }
+
+        @Override
+        public HttpClientRequest fetch(long amount) {
+          return this;
+        }
+
         @Override
         public HttpClientRequest endHandler(Handler<Void> endHandler) {
           return this;
         }
+
+        @Override
+        public Pipe<HttpClientResponse> pipe() {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void pipeTo(WriteStream<HttpClientResponse> dst) {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void pipeTo(WriteStream<HttpClientResponse> dst, Handler<AsyncResult<Void>> handler) {
+          throw new UnsupportedOperationException();
+        } 
+
         @Override
         public HttpClientRequest setFollowRedirects(boolean followRedirects) {
           return this;
@@ -387,6 +434,12 @@ public class HttpProxyImpl implements HttpProxy {
         public HttpClientRequest pushHandler(Handler<HttpClientRequest> handler) {
           throw new UnsupportedOperationException();
         }
+
+        @Override
+        public boolean reset() {
+          return false;
+        }
+
         @Override
         public boolean reset(long code) {
           throw new UnsupportedOperationException();
@@ -403,6 +456,27 @@ public class HttpProxyImpl implements HttpProxy {
         public HttpClientRequest writeCustomFrame(int type, int flags, Buffer payload) {
           throw new UnsupportedOperationException();
         }
+
+        @Override
+        public int streamId() {
+          return 0;
+        }
+
+        @Override
+        public HttpClientRequest writeCustomFrame(HttpFrame frame) {
+          return null;
+        }
+
+        @Override
+        public HttpClientRequest setStreamPriority(StreamPriority streamPriority) {
+          return null;
+        }
+
+        @Override
+        public StreamPriority getStreamPriority() {
+          return null;
+        }
+
         @Override
         public boolean writeQueueFull() {
           return false;

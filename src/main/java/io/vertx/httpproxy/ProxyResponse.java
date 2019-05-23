@@ -1,7 +1,7 @@
 package io.vertx.httpproxy;
 
-import io.vertx.codegen.annotations.CacheReturn;
 import io.vertx.codegen.annotations.Fluent;
+import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
@@ -18,7 +18,17 @@ import java.util.function.Function;
 @VertxGen
 public interface ProxyResponse {
 
-  int statusCode();
+  ProxyRequest request();
+
+  int getStatusCode();
+
+  @Fluent
+  ProxyResponse setStatusCode(int sc);
+
+  Body getBody();
+
+  @Fluent
+  ProxyResponse setBody(Body body);
 
   String statusMessage();
 
@@ -33,17 +43,12 @@ public interface ProxyResponse {
    */
   MultiMap headers();
 
+  @GenIgnore
+  @Fluent
+  ProxyResponse putHeader(CharSequence name, CharSequence value);
+
   @Fluent
   ProxyResponse bodyFilter(Function<ReadStream<Buffer>, ReadStream<Buffer>> filter);
-
-  /**
-   * Set the proxy response to use the {@code response}, this will update the values returned by {@link #statusCode()},
-   * {@link #statusMessage()}, {@link #headers()}, {@link #publicCacheControl()}, {@link #maxAge()}.
-   *
-   * @param response the response to use
-   */
-  @Fluent
-  ProxyResponse set(HttpClientResponse response);
 
   /**
    * Send the proxy response to the client.
@@ -53,9 +58,11 @@ public interface ProxyResponse {
   void send(Handler<AsyncResult<Void>> completionHandler);
 
   /**
-   * Cancels the proxy request, this will release the resources and clear the headers of the
-   * wrapped {@link io.vertx.core.http.HttpServerResponse}.
+   * Release the proxy response.
+   *
+   * <p> The HTTP client response is resumed, no HTTP server response is sent.
    */
-  void cancel();
+  @Fluent
+  ProxyResponse release();
 
 }

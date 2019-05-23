@@ -35,7 +35,7 @@ public class Main {
         .setMaxInitialLineLength(10000)
         .setLogActivity(true));
     HttpProxy proxy = HttpProxy
-        .reverseProxy(client)
+        .reverseProxy2(client)
         .target(8081, "96.126.115.136");
     HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions()
         .setPort(port)

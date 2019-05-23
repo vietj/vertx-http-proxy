@@ -3,7 +3,6 @@ package io.vertx.httpproxy;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.http.HttpClient;
-import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.net.SocketAddress;
@@ -49,21 +48,22 @@ public class CacheExpiresTest extends ProxyTestBase {
 
   private void testPublic(TestContext ctx, HttpMethod method) throws Exception {
     Async latch = ctx.async();
-    testPublic(ctx, resp1 -> {
+    testPublic(ctx, responseHeaders -> {
       vertx.setTimer(2000, id -> {
-        client.request(method, 8080, "localhost", "/", resp2 -> {
-          ctx.assertEquals(200, resp2.statusCode());
-          resp2.bodyHandler(buff2 -> {
-            if (method == HttpMethod.HEAD) {
-              ctx.assertEquals("", buff2.toString());
-            } else {
-              ctx.assertEquals("content", buff2.toString());
-            }
-            ctx.assertEquals(resp1.getHeader(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
-            ctx.assertEquals(1, hits.get());
-            latch.complete();
-          });
-        }).end();
+        client.request(method, 8080, "localhost", "/")
+            .compose(req2 -> req2.send().compose(resp2 -> {
+              ctx.assertEquals(200, resp2.statusCode());
+              ctx.assertEquals(responseHeaders.get(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
+              ctx.assertEquals(1, hits.get());
+              return resp2.body();
+            })).onComplete(ctx.asyncAssertSuccess(body2 -> {
+          if (method == HttpMethod.HEAD) {
+            ctx.assertEquals("", body2.toString());
+          } else {
+            ctx.assertEquals("content", body2.toString());
+          }
+          latch.complete();
+        }));
       });
     });
   }
@@ -71,17 +71,20 @@ public class CacheExpiresTest extends ProxyTestBase {
   @Test
   public void testPublicExpiration(TestContext ctx) throws Exception {
     Async latch = ctx.async();
-    testPublic(ctx, resp1 -> {
+    testPublic(ctx, responseHeaders -> {
       vertx.setTimer(6000, id -> {
-        client.getNow(8080, "localhost", "/", resp2 -> {
-          ctx.assertEquals(200, resp2.statusCode());
-          resp2.bodyHandler(buff2 -> {
-            ctx.assertEquals("content", buff2.toString());
-            ctx.assertEquals(2, hits.get());
-            ctx.assertNotEquals(resp1.getHeader(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
-            latch.complete();
-          });
-        });
+        client.request(HttpMethod.GET, 8080, "localhost", "/")
+            .compose(req2 ->
+                req2.send().compose(resp2 -> {
+                  ctx.assertEquals(200, resp2.statusCode());
+                  ctx.assertEquals(2, hits.get());
+                  ctx.assertNotEquals(responseHeaders.get(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
+                  return resp2.body();
+                })
+            ).onComplete(ctx.asyncAssertSuccess(body2 -> {
+          ctx.assertEquals("content", body2.toString());
+          latch.complete();
+        }));
       });
     });
   }
@@ -89,17 +92,20 @@ public class CacheExpiresTest extends ProxyTestBase {
   @Test
   public void testPublicValidClientMaxAge(TestContext ctx) throws Exception {
     Async latch = ctx.async();
-    testPublic(ctx, resp1 -> {
+    testPublic(ctx, responseHeaders -> {
       vertx.setTimer(1000, id -> {
-        client.get(8080, "localhost", "/", resp2 -> {
-          ctx.assertEquals(200, resp2.statusCode());
-          resp2.bodyHandler(buff2 -> {
-            ctx.assertEquals("content", buff2.toString());
-            ctx.assertEquals(1, hits.get());
-            ctx.assertEquals(resp1.getHeader(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
-            latch.complete();
-          });
-        }).putHeader(HttpHeaders.CACHE_CONTROL, "max-age=2").end();
+        client.request(HttpMethod.GET, 8080, "localhost", "/").compose(req2 ->
+            req2.putHeader(HttpHeaders.CACHE_CONTROL, "max-age=2")
+                .send().compose(resp2 -> {
+              ctx.assertEquals(200, resp2.statusCode());
+              ctx.assertEquals(1, hits.get());
+              ctx.assertEquals(responseHeaders.get(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
+              return resp2.body();
+            })
+        ).onComplete(ctx.asyncAssertSuccess(body2 -> {
+          ctx.assertEquals("content", body2.toString());
+          latch.complete();
+        }));
       });
     });
   }
@@ -107,22 +113,26 @@ public class CacheExpiresTest extends ProxyTestBase {
   @Test
   public void testPublicInvalidClientMaxAge(TestContext ctx) throws Exception {
     Async latch = ctx.async();
-    testPublic(ctx, resp1 -> {
+    testPublic(ctx, responseHeaders -> {
       vertx.setTimer(1000, id -> {
-        client.get(8080, "localhost", "/", resp2 -> {
-          ctx.assertEquals(200, resp2.statusCode());
-          resp2.bodyHandler(buff2 -> {
-            ctx.assertEquals("content", buff2.toString());
-            ctx.assertEquals(2, hits.get());
-            ctx.assertNotEquals(resp1.getHeader(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
-            latch.complete();
-          });
-        }).putHeader(HttpHeaders.CACHE_CONTROL, "max-age=1").end();
+        client.request(HttpMethod.GET, 8080, "localhost", "/").compose(req2 ->
+          req2.putHeader(HttpHeaders.CACHE_CONTROL, "max-age=1")
+              .send()
+              .compose(resp2 -> {
+                ctx.assertEquals(200, resp2.statusCode());
+                ctx.assertEquals(2, hits.get());
+                ctx.assertNotEquals(responseHeaders.get(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
+                return resp2.body();
+              })
+        ).onComplete(ctx.asyncAssertSuccess(body2 -> {
+          ctx.assertEquals("content", body2.toString());
+          latch.complete();
+        }));
       });
     });
   }
 
-  private void testPublic(TestContext ctx, Handler<HttpClientResponse> respHandler) throws Exception {
+  private void testPublic(TestContext ctx, Handler<MultiMap> respHandler) throws Exception {
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       hits.incrementAndGet();
       ctx.assertEquals(HttpMethod.GET, req.method());
@@ -134,13 +144,13 @@ public class CacheExpiresTest extends ProxyTestBase {
           .end("content");
     });
     startProxy(backend);
-    client.getNow(8080, "localhost", "/", resp -> {
-      ctx.assertEquals(200, resp.statusCode());
-      resp.bodyHandler(buff -> {
-        ctx.assertEquals("content", buff.toString());
-        respHandler.handle(resp);
-      });
-    });
+    client.request(HttpMethod.GET, 8080, "localhost", "/").compose(req ->
+        req.send().compose(resp -> {
+          ctx.assertEquals(200, resp.statusCode());
+          return resp.body().onSuccess(body -> respHandler.handle(resp.headers()));
+        })).onComplete(ctx.asyncAssertSuccess(body -> {
+      ctx.assertEquals("content", body.toString());
+    }));
   }
 
   @Test
@@ -190,23 +200,27 @@ public class CacheExpiresTest extends ProxyTestBase {
       }
     });
     startProxy(backend);
-    client.getNow(8080, "localhost", "/", resp1 -> {
-      ctx.assertEquals(200, resp1.statusCode());
-      resp1.bodyHandler(buff -> {
-        ctx.assertEquals("content", buff.toString());
-        vertx.setTimer(3000, id -> {
-          client.get(8080, "localhost", "/", resp2 -> {
-            ctx.assertEquals(200, resp2.statusCode());
-            resp2.bodyHandler(buff2 -> {
-              ctx.assertEquals("content", buff2.toString());
-              ctx.assertEquals(2, hits.get());
+    client.request(HttpMethod.GET, 8080, "localhost", "/").compose(req1 ->
+        req1.send().compose(resp1 -> {
+          ctx.assertEquals(200, resp1.statusCode());
+          return resp1.body();
+        })).onComplete(ctx.asyncAssertSuccess(body1 -> {
+      ctx.assertEquals("content", body1.toString());
+      vertx.setTimer(3000, id -> {
+        client.request(HttpMethod.GET, 8080, "localhost", "/").compose(req2 ->
+            req2.putHeader(HttpHeaders.CACHE_CONTROL, "max-age=1")
+                .send()
+                .compose(resp2 -> {
+                  ctx.assertEquals(200, resp2.statusCode());
+                return resp2.body();
+            })).onComplete(ctx.asyncAssertSuccess(body2 -> {
+          ctx.assertEquals("content", body2.toString());
+          ctx.assertEquals(2, hits.get());
 //              ctx.assertNotEquals(resp1.getHeader(HttpHeaders.DATE), resp2.getHeader(HttpHeaders.DATE));
-              latch.complete();
-            });
-          }).putHeader(HttpHeaders.CACHE_CONTROL, "max-age=1").end();
-        });
+          latch.complete();
+        }));
       });
-    });
+    }));
   }
 
 }

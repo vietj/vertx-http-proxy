@@ -1,5 +1,6 @@
 package io.vertx.httpproxy;
 
+import io.vertx.core.Promise;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.*;
 import io.vertx.core.net.NetClient;
@@ -12,9 +13,11 @@ import org.junit.Test;
 import java.io.Closeable;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static io.vertx.core.http.HttpMethod.GET;
+import static io.vertx.core.http.HttpMethod.HEAD;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -52,14 +55,16 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    Async async = ctx.async();
-    client.getNow(8080, "localhost", "/somepath", resp -> {
-      ctx.assertEquals(200, resp.statusCode());
-      resp.bodyHandler(buff -> {
-        ctx.assertEquals("Hello World", buff.toString());
-        async.complete();
-      });
-    });
+    client.request(GET, 8080, "localhost", "/somepath")
+        .compose(req -> req
+            .send()
+            .compose(resp -> {
+              ctx.assertEquals(200, resp.statusCode());
+              return resp.body();
+            }))
+        .onComplete(ctx.asyncAssertSuccess(body -> {
+          ctx.assertEquals("Hello World", body.toString());
+        }));
   }
 
   @Test
@@ -72,18 +77,19 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       req.bodyHandler(buff -> {
         req.response().end();
         ctx.assertEquals(Buffer.buffer(body), buff);
-        async.complete();
+        async.countDown();
       });
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
-      ctx.assertEquals(200, resp.statusCode());
-      resp.endHandler(v -> {
-        async.complete();
-      });
-    });
-    req.end(Buffer.buffer(body));
+    client.request(GET, 8080, "localhost", "/")
+        .compose(req -> req
+            .send(Buffer.buffer(body))
+            .compose(resp -> {
+              ctx.assertEquals(200, resp.statusCode());
+              return resp.body();
+            }))
+        .onComplete(ctx.asyncAssertSuccess(buff -> async.countDown()));
   }
 
   @Test
@@ -98,49 +104,47 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    AtomicBoolean responseReceived = new AtomicBoolean();
-    HttpClientRequest req = client.post(8080, "localhost", "/", resp -> {
-      ctx.assertEquals(502, resp.statusCode());
-      responseReceived.set(true);
-    });
     Async async = ctx.async();
-    req.connectionHandler(conn -> {
-      conn.closeHandler(v -> {
-        ctx.assertTrue(responseReceived.get());
-        async.complete();
-      });
-    });
-    req.putHeader("Content-Length", "2048");
-    req.write(Buffer.buffer(new byte[1024]));
+    client.request(HttpMethod.POST, 8080, "localhost", "/")
+        .onComplete(ctx.asyncAssertSuccess(req -> {
+          req.onComplete(ctx.asyncAssertSuccess(resp -> {
+            ctx.assertEquals(502, resp.statusCode());
+            async.complete();
+          }));
+          req.putHeader("Content-Length", "2048");
+          req.write(Buffer.buffer(new byte[1024]));
+        }));
   }
 
   @Test
   public void testClientClosesDuringUpload(TestContext ctx) {
     Async async = ctx.async();
-    Async closeLatch = ctx.async();
+    Promise<Void> closeLatch = Promise.promise();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       req.response().closeHandler(v -> {
         async.complete();
       });
       req.handler(buff -> {
-        if (!closeLatch.isCompleted()) {
-          closeLatch.complete();
-        }
+        closeLatch.tryComplete();
       });
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    HttpClientRequest req = client.post(8080, "localhost", "/", resp -> ctx.fail());
-    req.putHeader("Content-Length", "2048");
-    req.write(Buffer.buffer(new byte[1024]));
-    closeLatch.awaitSuccess(10000);
-    req.connection().close();
+    client.request(HttpMethod.POST, 8080, "localhost", "/")
+        .onComplete(ctx.asyncAssertSuccess(req -> {
+          req.onComplete(ctx.asyncAssertFailure());
+          req.putHeader("Content-Length", "2048");
+          req.write(Buffer.buffer(new byte[1024]));
+          closeLatch.future().onComplete(ar -> {
+            req.connection().close();
+          });
+        }));
   }
 
   @Test
   public void testClientClosesAfterUpload(TestContext ctx) {
     Async async = ctx.async();
-    Async closeLatch = ctx.async();
+    Promise<Void> closeLatch = Promise.promise();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       req.endHandler(v -> {
         closeLatch.complete();
@@ -154,11 +158,14 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    HttpClientRequest req = client.post(8080, "localhost", "/", resp -> ctx.fail());
-    req.end(Buffer.buffer(new byte[1024]));
-    closeLatch.awaitSuccess(10000);
-    HttpConnection conn = req.connection();
-    conn.close();
+    client.request(HttpMethod.POST, 8080, "localhost", "/")
+        .onComplete(ctx.asyncAssertSuccess(req -> {
+          closeLatch.future().onSuccess(v -> {
+            HttpConnection conn = req.connection();
+            conn.close();
+          });
+          req.send(Buffer.buffer(new byte[1024]), ctx.asyncAssertFailure());
+        }));
   }
 
   @Test
@@ -178,14 +185,14 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    HttpClientRequest req = client.post(8080, "localhost", "/");
-    Async async = ctx.async();
-    req.handler(resp -> {
-      ctx.assertEquals(200, resp.statusCode());
-      async.complete();
-    });
-    req.putHeader("Content-Length", "2048");
-    req.write(Buffer.buffer(new byte[1024]));
+    client.request(HttpMethod.POST, 8080, "localhost", "/")
+        .onComplete(ctx.asyncAssertSuccess(req -> {
+          req.putHeader("Content-Length", "2048");
+          req.write(Buffer.buffer(new byte[1024]));
+          req.onComplete(ctx.asyncAssertSuccess(resp -> {
+            ctx.assertEquals(200, resp.statusCode());
+          }));
+        }));
   }
 
   @Test
@@ -215,14 +222,17 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
     Async async = ctx.async();
-    client.getNow(8080, "localhost", "/", resp -> {
-      resp.handler(buff -> {
-        closeFuture.complete(null);
-      });
-      resp.exceptionHandler(err -> {
-        async.complete();
-      });
-    });
+    client.request(GET, 8080, "localhost", "/")
+        .onComplete(ctx.asyncAssertSuccess(req -> {
+          req.send(ctx.asyncAssertSuccess(resp -> {
+            resp.handler(buff -> {
+              closeFuture.complete(null);
+            });
+            resp.exceptionHandler(err -> {
+              async.complete();
+            });
+          }));
+    }));
   }
 
   @Test
@@ -251,34 +261,35 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "/", resp -> {
-      resp.handler(buff -> {
-        resp.request().connection().close();
-        System.out.println("closing");
-      });
-    });
+    client.request(GET, 8081, "localhost", "/", ctx.asyncAssertSuccess(req -> {
+      req.send(ctx.asyncAssertSuccess(resp -> {
+        resp.handler(buff -> {
+          resp.request().connection().close();
+          System.out.println("closing");
+        });
+      }));
+    }));
   }
 
   @Test
   public void testBackendRepliesIncorrectHttpVersion(TestContext ctx) {
-    Async latch = ctx.async();
     SocketAddress backend = startNetBackend(ctx, 8081, so -> {
       so.write("HTTP/1.2 200 OK\r\n\r\n");
       so.close();
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "/", resp -> {
-      ctx.assertEquals(502, resp.statusCode());
-      resp.endHandler(v -> {
-        latch.complete();
-      });
-    });
+    client.request(GET, 8080, "localhost", "/")
+        .compose(req ->
+      req.send().compose(resp -> {
+        ctx.assertEquals(502, resp.statusCode());
+        return resp.body();
+      })).onComplete(ctx.asyncAssertSuccess(b -> {
+    }));
   }
 
   @Test
   public void testSuppressIncorrectWarningHeaders(TestContext ctx) {
-    Async latch = ctx.async();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       req.response()
           .putHeader("date", "Tue, 15 Nov 1994 08:12:30 GMT")
@@ -287,11 +298,12 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "/", resp -> {
-      ctx.assertNotNull(resp.getHeader("date"));
-      ctx.assertNull(resp.getHeader("warning"));
-      latch.complete();
-    });
+    client.request(GET, 8080, "localhost", "/", ctx.asyncAssertSuccess(req -> {
+      req.send(ctx.asyncAssertSuccess(resp -> {
+        ctx.assertNotNull(resp.getHeader("date"));
+        ctx.assertNull(resp.getHeader("warning"));
+      }));
+    }));
   }
 
   @Test
@@ -305,27 +317,33 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "/", resp -> {
-      ctx.assertNotNull(resp.getHeader("date"));
-      latch.complete();
-    });
+    client.request(GET, 8080, "localhost", "/", ctx.asyncAssertSuccess(req -> {
+      req.send(ctx.asyncAssertSuccess(resp -> {
+        ctx.assertNotNull(resp.getHeader("date"));
+        latch.complete();
+      }));
+    }));
   }
 
   @Test
   public void testAddMissingHeaderDateFromWarning(TestContext ctx) {
-    String expected = "Tue, 15 Nov 1994 08:12:31 GMT";
+    String expectedDate = "Tue, 15 Nov 1994 08:12:31 GMT";
+    String expectedWarning = "199 Miscellaneous warning \"" + expectedDate + "\"";
     Async latch = ctx.async();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
       req.response()
-          .putHeader("warning", "199 Miscellaneous warning \"" + expected + "\"")
+          .putHeader("warning", expectedWarning)
           .end();
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "/", resp -> {
-      ctx.assertEquals(expected, resp.getHeader("date"));
-      latch.complete();
-    });
+    client.request(GET, 8080, "localhost", "/", ctx.asyncAssertSuccess(req -> {
+      req.send(ctx.asyncAssertSuccess(resp -> {
+        ctx.assertEquals(expectedDate, resp.getHeader("date"));
+        ctx.assertEquals(expectedWarning, resp.getHeader("warning"));
+        latch.complete();
+      }));
+    }));
   }
 
   @Test
@@ -352,27 +370,29 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     for (int i = 0;i < num;i++) {
       sb.append("chunk-").append(i);
     }
-    client.getNow(8080, "localhost", "/", resp -> {
-      if (version == HttpVersion.HTTP_1_1) {
-        ctx.assertEquals("chunked", resp.getHeader("transfer-encoding"));
-        ctx.assertEquals(null, resp.getHeader("content-length"));
-      } else {
-        ctx.assertEquals(null, resp.getHeader("transfer-encoding"));
-        ctx.assertEquals("" + sb.length(), resp.getHeader("content-length"));
-      }
-      resp.handler(buff -> {
-        String part = buff.toString();
-        if (sb.indexOf(part) == 0) {
-          sb.delete(0, part.length());
+    client.request(GET, 8080, "localhost", "/", ctx.asyncAssertSuccess(req -> {
+      req.send(ctx.asyncAssertSuccess(resp -> {
+        if (version == HttpVersion.HTTP_1_1) {
+          ctx.assertEquals("chunked", resp.getHeader("transfer-encoding"));
+          ctx.assertEquals(null, resp.getHeader("content-length"));
         } else {
-          ctx.fail();
+          ctx.assertEquals(null, resp.getHeader("transfer-encoding"));
+          ctx.assertEquals("" + sb.length(), resp.getHeader("content-length"));
         }
-      });
-      resp.endHandler(v -> {
-        ctx.assertEquals("", sb.toString());
-        latch.complete();
-      });
-    });
+        resp.handler(buff -> {
+          String part = buff.toString();
+          if (sb.indexOf(part) == 0) {
+            sb.delete(0, part.length());
+          } else {
+            ctx.fail();
+          }
+        });
+        resp.endHandler(v -> {
+          ctx.assertEquals("", sb.toString());
+          latch.complete();
+        });
+      }));
+    }));
   }
 
   @Test
@@ -401,10 +421,11 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    HttpClientRequest req = client.get(8080, "localhost", "/", resp -> {
-    });
-    req.setChunked(true);
-    streamChunkedBody(req, num);
+    client.request(GET, 8080, "localhost", "/")
+        .onSuccess(req -> {
+          req.setChunked(true);
+          streamChunkedBody(req, num);
+        });
   }
 
   @Test
@@ -437,10 +458,12 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.getNow(8080, "localhost", "" + uri, resp -> {
-      ctx.assertEquals(200, resp.statusCode());
-      latch.complete();
-    });
+    client.request(GET, 8080, "localhost", "" + uri, ctx.asyncAssertSuccess(req -> {
+      req.send(ctx.asyncAssertSuccess(resp -> {
+        ctx.assertEquals(200, resp.statusCode());
+        latch.complete();
+      }));
+    }));
   }
 
   @Test
@@ -468,13 +491,15 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
     clientOptions.setMaxInitialLineLength(5000);
     startProxy(backend);
     HttpClient client = vertx.createHttpClient(/*new HttpClientOptions().setProtocolVersion(HttpVersion.HTTP_1_0)*/);
-    client.getNow(8080, "localhost", "/somepath", resp -> {
-      ctx.assertEquals(200, resp.statusCode());
-      resp.bodyHandler(body -> {
-        ctx.assertEquals("0123456789", body.toString());
-        latch.complete();
-      });
-    });
+    client.request(GET, 8080, "localhost", "/somepath").compose(req ->
+      req.send().compose(resp -> {
+        ctx.assertEquals(200, resp.statusCode());
+        return resp.body();
+      })
+    ).onComplete(ctx.asyncAssertSuccess(body -> {
+      ctx.assertEquals("0123456789", body.toString());
+      latch.complete();
+    }));
   }
 
   @Test
@@ -563,33 +588,54 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
 
   @Test
   public void testRawMethod(TestContext ctx) throws Exception {
-    Async latch = ctx.async();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
-      ctx.assertEquals(HttpMethod.OTHER, req.method());
-      ctx.assertEquals("FOO", req.rawMethod());
+      ctx.assertEquals("FOO", req.method().name());
       req.response().end();
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.request(HttpMethod.OTHER, 8080, "localhost", "/", resp -> latch.complete()).setRawMethod("FOO").end();
+    client.request(HttpMethod.valueOf("FOO"), 8080, "localhost", "/")
+        .compose(req -> req.send().compose(HttpClientResponse::body))
+        .onComplete(ctx.asyncAssertSuccess());
   }
 
   @Test
   public void testHead(TestContext ctx) throws Exception {
     Async latch = ctx.async();
     SocketAddress backend = startHttpBackend(ctx, 8081, req -> {
-      ctx.assertEquals(HttpMethod.HEAD, req.method());
+      ctx.assertEquals(HEAD, req.method());
       req.response().putHeader("content-length", "" + "content".length()).end();
     });
     startProxy(backend);
     HttpClient client = vertx.createHttpClient();
-    client.request(HttpMethod.HEAD, 8080, "localhost", "/", resp -> {
-      ctx.assertEquals("" + ("content".length()), resp.getHeader("content-length"));
-      resp.bodyHandler(buff -> {
-        ctx.assertEquals("", buff.toString());
-        latch.complete();
-      });
-    }).end();
+    client.request(HEAD, 8080, "localhost", "/").compose(req ->
+      req.send().compose(HttpClientResponse::body)
+    ).onComplete(ctx.asyncAssertSuccess(body -> {
+      ctx.assertEquals("", body.toString());
+      latch.complete();
+    }));
+  }
+
+  // TODO test we don't filter content...
+  @Test
+  public void testHeadWithNotSendBody(TestContext ctx) throws Exception {
+    Async latch = ctx.async();
+    SocketAddress backend = startNetBackend(ctx, 8081, so -> {
+      so.write(
+        "HTTP/1.1 200 OK\r\n" +
+          "content-length: 20\r\n" +
+          "\r\n" +
+          "0123456789"
+      );
+    });
+    startProxy(backend);
+    HttpClient client = vertx.createHttpClient();
+    client.request(HEAD, 8080, "localhost", "/").compose(req ->
+      req.send().compose(HttpClientResponse::body)
+    ).onComplete(ctx.asyncAssertSuccess(body -> {
+      ctx.assertEquals("", body.toString());
+      latch.complete();
+    }));
   }
 
   private void checkBadResponse(TestContext ctx, String... responses) throws Exception {
@@ -609,13 +655,14 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       Async latch = ctx.async();
       HttpClient client = vertx.createHttpClient();
       try (Closeable proxy = startProxy(backend)) {
-        client.get(8080, "localhost", "/somepath", resp -> {
-          ctx.assertEquals(501, resp.statusCode());
-          resp.bodyHandler(body -> {
-            ctx.assertEquals("", body.toString());
-            latch.complete();
-          });
-        }).exceptionHandler(ctx::fail).end();
+        client.request(GET, 8080, "localhost", "/somepath")
+            .compose(req -> req.send().compose(resp -> {
+              ctx.assertEquals(501, resp.statusCode());
+              return resp.body();
+            })).onComplete(ctx.asyncAssertSuccess(body -> {
+          ctx.assertEquals("", body.toString());
+          latch.complete();
+        }));
         latch.awaitSuccess(10000);
       } finally {
         client.close();
@@ -643,5 +690,23 @@ public class ProxyClientKeepAliveTest extends ProxyTestBase {
       uri.append((char)('A' + random.nextInt(26)));
     }
     return uri;
+  }
+
+  @Test
+  public void testPropagateHeaders(TestContext ctx) {
+    SocketAddress backend = startHttpBackend(ctx, new HttpServerOptions().setPort(8081).setMaxInitialLineLength(10000), req -> {
+      ctx.assertEquals("request_header_value", req.getHeader("request_header"));
+      req.response().putHeader("response_header", "response_header_value").end();
+    });
+    startProxy(backend);
+    HttpClient client = vertx.createHttpClient();
+    Async latch = ctx.async();
+    client.request(GET, 8080, "localhost", "/", ctx.asyncAssertSuccess(req -> {
+      req.putHeader("request_header", "request_header_value").send(ctx.asyncAssertSuccess(resp -> {
+        ctx.assertEquals(200, resp.statusCode());
+        ctx.assertEquals("response_header_value", resp.getHeader("response_header"));
+        latch.complete();
+      }));
+    }));
   }
 }

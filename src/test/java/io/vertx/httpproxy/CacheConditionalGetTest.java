@@ -3,6 +3,7 @@ package io.vertx.httpproxy;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpHeaders;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.net.impl.SocketAddressImpl;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -53,21 +54,27 @@ public class CacheConditionalGetTest extends ProxyTestBase {
                 .withBody("content")));
     startProxy(new SocketAddressImpl(8081, "localhost"));
     Async latch = ctx.async();
-    client.getNow(8080, "localhost", "/img.jpg", resp1 -> {
-      ctx.assertEquals(200, resp1.statusCode());
-      resp1.bodyHandler(buff -> {
-        ctx.assertEquals("content", buff.toString());
-        vertx.setTimer(3000, id -> {
-          client.get(8080, "localhost", "/img.jpg", resp2 -> {
-            ctx.assertEquals(304, resp2.statusCode());
-            resp2.bodyHandler(buff2 -> {
-              ctx.assertEquals("", buff2.toString());
-              latch.complete();
-            });
-          }).putHeader(HttpHeaders.IF_MODIFIED_SINCE, ParseUtils.formatHttpDate(new Date(now - 5000))).end();
-        });
+    client.request(HttpMethod.GET, 8080, "localhost", "/img.jpg").compose(req1 ->
+      req1.send().compose(resp1 -> {
+        ctx.assertEquals(200, resp1.statusCode());
+        return resp1.body();
+      })
+    ).onComplete(ctx.asyncAssertSuccess(body1 -> {
+      ctx.assertEquals("content", body1.toString());
+      vertx.setTimer(3000, id -> {
+        client.request(HttpMethod.GET, 8080, "localhost", "/img.jpg")
+            .compose(req2 -> req2
+                .putHeader(HttpHeaders.IF_MODIFIED_SINCE, ParseUtils.formatHttpDate(new Date(now - 5000)))
+                .send()
+                .compose(resp2 -> {
+              ctx.assertEquals(304, resp2.statusCode());
+              return resp2.body();
+            })).onComplete(ctx.asyncAssertSuccess(body2 -> {
+          ctx.assertEquals("", body2.toString());
+          latch.complete();
+        }));
       });
-    });
+    }));
     latch.awaitSuccess(10000);
 /*
     ServeEvent event1 = getAllServeEvents().get(1);

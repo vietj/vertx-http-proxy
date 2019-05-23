@@ -271,6 +271,11 @@ public class HttpProxyImpl implements HttpProxy {
           return this;
         }
         @Override
+        public HttpClientRequest write(Buffer data, Handler<AsyncResult<Void>> handler) {
+          handler.handle(Future.succeededFuture());
+          return this;
+        }
+        @Override
         public HttpClientRequest setWriteQueueMaxSize(int maxSize) {
           return this;
         }
@@ -390,7 +395,17 @@ public class HttpProxyImpl implements HttpProxy {
           return this;
         }
         @Override
+        public HttpClientRequest write(String chunk, Handler<AsyncResult<Void>> handler) {
+          handler.handle(Future.succeededFuture());
+          return this;
+        }
+        @Override
         public HttpClientRequest write(String chunk, String enc) {
+          return this;
+        }
+        @Override
+        public HttpClientRequest write(String chunk, String enc, Handler<AsyncResult<Void>> handler) {
+          handler.handle(Future.succeededFuture());
           return this;
         }
         @Override
@@ -410,12 +425,27 @@ public class HttpProxyImpl implements HttpProxy {
           end();
         }
         @Override
+        public void end(String chunk, Handler<AsyncResult<Void>> handler) {
+          end(chunk);
+          handler.handle(Future.succeededFuture());
+        }
+        @Override
         public void end(String chunk, String enc) {
           end();
         }
         @Override
+        public void end(String chunk, String enc, Handler<AsyncResult<Void>> handler) {
+          end(chunk, enc);
+          handler.handle(Future.succeededFuture());
+        }
+        @Override
         public void end(Buffer chunk) {
           end();
+        }
+        @Override
+        public void end(Buffer chunk, Handler<AsyncResult<Void>> handler) {
+          end(chunk);
+          handler.handle(Future.succeededFuture());
         }
         @Override
         public void end() {
@@ -425,6 +455,11 @@ public class HttpProxyImpl implements HttpProxy {
           Vertx.currentContext().runOnContext(v -> {
             resp.send();
           });
+        }
+        @Override
+        public void end(Handler<AsyncResult<Void>> handler) {
+          end();
+          handler.handle(Future.succeededFuture());
         }
         @Override
         public HttpClientRequest setTimeout(long timeoutMs) {

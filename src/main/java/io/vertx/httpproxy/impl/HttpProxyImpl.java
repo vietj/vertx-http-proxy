@@ -27,7 +27,7 @@ public class HttpProxyImpl implements HttpProxy {
   private final HttpClient client;
   private Function<HttpServerRequest, Future<SocketAddress>> targetSelector = req -> Future.failedFuture("No target available");
   private final Map<String, Resource> cache = new HashMap<>();
-
+  private Function<String, String> urlRewriter;
 
   public HttpProxyImpl(HttpClient client) {
     this.client = client;
@@ -41,7 +41,7 @@ public class HttpProxyImpl implements HttpProxy {
 
   @Override
   public ProxyRequest proxy(HttpServerRequest request, SocketAddress target) {
-    return new ProxyRequestImpl(client, target, request);
+    return new ProxyRequestImpl(client, target, request, this.urlRewriter);
   }
 
   @Override
@@ -52,6 +52,12 @@ public class HttpProxyImpl implements HttpProxy {
   @Override
   public HttpProxy selector(Function<HttpServerRequest, Future<SocketAddress>> selector) {
     targetSelector = selector;
+    return this;
+  }
+
+  @Override
+  public HttpProxy urlRewriter(Function<String, String> urlRewriter) {
+    this.urlRewriter = urlRewriter;
     return this;
   }
 
@@ -581,7 +587,7 @@ public class HttpProxyImpl implements HttpProxy {
     fut.setHandler(ar -> {
       if (ar.succeeded()) {
         SocketAddress target = ar.result();
-        ProxyRequestImpl proxyReq = new ProxyRequestImpl(client, target, request);
+        ProxyRequestImpl proxyReq = new ProxyRequestImpl(client, target, request, this.urlRewriter);
 
         if (resource != null && resource.etag != null) {
           proxyReq.headers().set(HttpHeaders.IF_NONE_MATCH, resource.etag);

@@ -18,6 +18,7 @@ import io.vertx.core.streams.ReadStream;
 import io.vertx.core.streams.WriteStream;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +26,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>
@@ -46,6 +48,21 @@ public class ProxyRequestTest extends ProxyTestBase {
     Async async = ctx.async();
     HttpClient httpClient = vertx.createHttpClient();
     httpClient.getNow(8080, "localhost", "/somepath", resp -> {
+      resp.endHandler(v -> async.complete());
+    });
+  }
+
+  @Test
+  public void testUrlRewrite(TestContext ctx) {
+    String targetUri = "/target";
+    runHttpTest(ctx, req -> {
+        Assert.assertEquals(targetUri, req.path());
+        req.response().end("Hello World");
+      }, ctx.asyncAssertSuccess())
+      .urlRewriter(originUri -> targetUri);
+    Async async = ctx.async();
+    HttpClient httpClient = vertx.createHttpClient();
+    httpClient.getNow(8080, "localhost", "/original", resp -> {
       resp.endHandler(v -> async.complete());
     });
   }
@@ -500,9 +517,9 @@ public class ProxyRequestTest extends ProxyTestBase {
     }
   }
 
-  private void runHttpTest(TestContext ctx,
-                           Handler<HttpServerRequest> backendHandler,
-                           Handler<AsyncResult<Void>> expect) {
+  private HttpProxy runHttpTest(TestContext ctx,
+                                Handler<HttpServerRequest> backendHandler,
+                                Handler<AsyncResult<Void>> expect) {
     Async async = ctx.async();
     SocketAddress backend = startHttpBackend(ctx, 8081, backendHandler);
     HttpClient client = vertx.createHttpClient(new HttpClientOptions(clientOptions));
@@ -514,6 +531,7 @@ public class ProxyRequestTest extends ProxyTestBase {
         async.complete();
       });
     });
+    return proxy;
   }
 
   private void runNetTest(TestContext ctx,

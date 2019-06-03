@@ -44,10 +44,14 @@ public class ProxyRequestImpl implements ProxyRequest {
   private Pump requestPump;
   private Pump responsePump;
 
-  public ProxyRequestImpl(HttpClient client, SocketAddress target, HttpServerRequest request) {
+  public ProxyRequestImpl(HttpClient client, SocketAddress target, HttpServerRequest request, Function<String, String> urlRewriter) {
     this(req -> {
       HttpMethod method = req.method();
-      HttpClientRequest backRequest = client.request(method, target.port(), target.host(), req.uri());
+      String targetUri = req.uri();
+      if (urlRewriter != null) {
+        targetUri = urlRewriter.apply(targetUri);
+      }
+      HttpClientRequest backRequest = client.request(method, target.port(), target.host(), targetUri);
       if (method == HttpMethod.OTHER) {
         backRequest.setRawMethod(req.rawMethod());
       }

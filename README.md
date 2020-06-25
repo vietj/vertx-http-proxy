@@ -12,7 +12,7 @@ _package_ and then run the _fatjar_ :
 
 ````
 > mvn package
-> java -jar target/vertx-reverse-proxy-1.0.0-SNAPSHOT.jar
+> java -jar target/vertx-reverse-proxy-1.0.0-SNAPSHOT-fat.jar
 ````
 
 Docker containers are discovered using docker labels, for example:

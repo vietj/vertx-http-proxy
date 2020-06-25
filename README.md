@@ -12,7 +12,7 @@ _package_ and then run the _fatjar_ :
 
 ````
 > mvn package
-> java -jar target/vertx-reverse-proxy-3.3.0-SNAPSHOT.jar
+> java -jar target/vertx-reverse-proxy-1.0.0-SNAPSHOT.jar
 ````
 
 Docker containers are discovered using docker labels, for example:
@@ -29,5 +29,5 @@ Then backend server will be accessible on the proxy server under the `/hello` ro
 The client posts a body and the backend closes the connection before upload is complete.
 The client gets a `502` response and its connection is closed.
 
-The client posts a body and the backend receives parts of the body then the client closes the connectino before
+The client posts a body and the backend receives parts of the body then the client closes the connection before
 the upload is complete. The backend gets its connection closed.

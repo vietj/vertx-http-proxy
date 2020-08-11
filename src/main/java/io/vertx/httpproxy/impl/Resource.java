@@ -12,7 +12,6 @@ class Resource {
 
   final String absoluteUri;
   final int statusCode;
-  final String statusMessage;
   final MultiMap headers;
   final long timestamp;
   final long maxAge;
@@ -20,11 +19,10 @@ class Resource {
   final String etag;
   final Buffer content = Buffer.buffer();
 
-  Resource(String absoluteUri, int statusCode, String statusMessage, MultiMap headers, long timestamp, long maxAge) {
+  Resource(String absoluteUri, int statusCode, MultiMap headers, long timestamp, long maxAge) {
     String lastModifiedHeader = headers.get(HttpHeaders.LAST_MODIFIED);
     this.absoluteUri = absoluteUri;
     this.statusCode = statusCode;
-    this.statusMessage = statusMessage;
     this.headers = headers;
     this.timestamp = timestamp;
     this.maxAge = maxAge;

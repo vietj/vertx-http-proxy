@@ -26,14 +26,14 @@ public class ProxyRequestImpl implements ProxyRequest {
   private String absoluteURI;
   private Body body;
   private MultiMap headers;
-  HttpClientRequest backRequest;
-  private HttpServerResponse frontResponse;
+  HttpClientRequest edgeRequest;
+  private HttpServerResponse edgeResponse;
 
-  public ProxyRequestImpl(HttpServerRequest frontRequest) {
+  public ProxyRequestImpl(HttpServerRequest edgeRequest) {
 
     // Determine content length
     long contentLength = -1L;
-    String contentLengthHeader = frontRequest.getHeader(HttpHeaders.CONTENT_LENGTH);
+    String contentLengthHeader = edgeRequest.getHeader(HttpHeaders.CONTENT_LENGTH);
     if (contentLengthHeader != null) {
       try {
         contentLength = Long.parseLong(contentLengthHeader);
@@ -42,18 +42,29 @@ public class ProxyRequestImpl implements ProxyRequest {
       }
     }
 
-    this.method = frontRequest.method();
-    this.version = frontRequest.version();
-    this.body = Body.body(frontRequest, contentLength);
-    this.uri = frontRequest.uri();
-    this.headers = MultiMap.caseInsensitiveMultiMap().addAll(frontRequest.headers());
-    this.absoluteURI = frontRequest.absoluteURI();
-    this.frontResponse = frontRequest.response();
+    this.method = edgeRequest.method();
+    this.version = edgeRequest.version();
+    this.body = Body.body(edgeRequest, contentLength);
+    this.uri = edgeRequest.uri();
+    this.headers = MultiMap.caseInsensitiveMultiMap().addAll(edgeRequest.headers());
+    this.absoluteURI = edgeRequest.absoluteURI();
+    this.edgeResponse = edgeRequest.response();
   }
 
   @Override
   public HttpVersion version() {
     return version;
+  }
+
+  @Override
+  public String getURI() {
+    return uri;
+  }
+
+  @Override
+  public ProxyRequest setURI(String uri) {
+    this.uri = uri;
+    return this;
   }
 
   @Override
@@ -93,19 +104,19 @@ public class ProxyRequestImpl implements ProxyRequest {
 
   @Override
   public ProxyResponse response() {
-    return new ProxyResponseImpl(this, frontResponse);
+    return new ProxyResponseImpl(this, edgeResponse);
   }
 
   void sendRequest(Handler<AsyncResult<ProxyResponse>> responseHandler) {
 
-    backRequest.<ProxyResponse>map(r -> {
+    edgeRequest.<ProxyResponse>map(r -> {
       r.pause(); // Pause it
-      return new ProxyResponseImpl(this, frontResponse, r);
+      return new ProxyResponseImpl(this, edgeResponse, r);
     }).onComplete(responseHandler);
 
 
-    backRequest.setMethod(method);
-    backRequest.setURI(uri);
+    edgeRequest.setMethod(method);
+    edgeRequest.setURI(uri);
 
     // Add all end-to-end headers
     headers.forEach(header -> {
@@ -114,23 +125,23 @@ public class ProxyRequestImpl implements ProxyRequest {
       if (name.equalsIgnoreCase("host")) {
         // Skip
       } else {
-        backRequest.headers().add(name, value);
+        edgeRequest.headers().add(name, value);
       }
     });
 
     long len = body.length();
     if (len >= 0) {
-      backRequest.putHeader(HttpHeaders.CONTENT_LENGTH, Long.toString(len));
+      edgeRequest.putHeader(HttpHeaders.CONTENT_LENGTH, Long.toString(len));
     } else {
-      backRequest.setChunked(true);
+      edgeRequest.setChunked(true);
     }
 
     Pipe<Buffer> pipe = body.stream().pipe();
     pipe.endOnComplete(true);
     pipe.endOnFailure(false);
-    pipe.to(backRequest, ar -> {
+    pipe.to(edgeRequest, ar -> {
       if (ar.failed()) {
-        backRequest.reset();
+        edgeRequest.reset();
       }
     });
   }
@@ -153,7 +164,7 @@ public class ProxyRequestImpl implements ProxyRequest {
 
   @Override
   public void send(HttpClientRequest request, Handler<AsyncResult<ProxyResponse>> completionHandler) {
-    backRequest = request;
+    edgeRequest = request;
     sendRequest(completionHandler);
   }
 }

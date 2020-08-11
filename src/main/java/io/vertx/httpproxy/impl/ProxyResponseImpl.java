@@ -22,29 +22,29 @@ import java.util.function.Function;
 class ProxyResponseImpl implements ProxyResponse {
 
   private final ProxyRequestImpl request;
-  private final HttpServerResponse frontResponse;
+  private final HttpServerResponse edgeResponse;
   private int statusCode;
   private Body body;
   private MultiMap headers;
-  private HttpClientResponse backResponse;
+  private HttpClientResponse originResponse;
   private long maxAge;
   private String etag;
   private boolean publicCacheControl;
   private Function<ReadStream<Buffer>, ReadStream<Buffer>> bodyFilter = Function.identity();
 
-  ProxyResponseImpl(ProxyRequestImpl request, HttpServerResponse frontResponse) {
-    this.backResponse = null;
+  ProxyResponseImpl(ProxyRequestImpl request, HttpServerResponse edgeResponse) {
+    this.originResponse = null;
     this.statusCode = 200;
     this.headers = MultiMap.caseInsensitiveMultiMap();
     this.request = request;
-    this.frontResponse = frontResponse;
+    this.edgeResponse = edgeResponse;
   }
 
-  ProxyResponseImpl(ProxyRequestImpl request, HttpServerResponse frontResponse, HttpClientResponse backResponse) {
+  ProxyResponseImpl(ProxyRequestImpl request, HttpServerResponse edgeResponse, HttpClientResponse originResponse) {
 
     // Determine content length
     long contentLength = -1L;
-    String contentLengthHeader = backResponse.getHeader(HttpHeaders.CONTENT_LENGTH);
+    String contentLengthHeader = originResponse.getHeader(HttpHeaders.CONTENT_LENGTH);
     if (contentLengthHeader != null) {
       try {
         contentLength = Long.parseLong(contentLengthHeader);
@@ -54,14 +54,14 @@ class ProxyResponseImpl implements ProxyResponse {
     }
 
     this.request = request;
-    this.backResponse = backResponse;
-    this.frontResponse = frontResponse;
-    this.statusCode = backResponse.statusCode();
-    this.body = Body.body(backResponse, contentLength);
+    this.originResponse = originResponse;
+    this.edgeResponse = edgeResponse;
+    this.statusCode = originResponse.statusCode();
+    this.body = Body.body(originResponse, contentLength);
 
     long maxAge = -1;
     boolean publicCacheControl = false;
-    String cacheControlHeader = backResponse.getHeader(HttpHeaders.CACHE_CONTROL);
+    String cacheControlHeader = originResponse.getHeader(HttpHeaders.CACHE_CONTROL);
     if (cacheControlHeader != null) {
       CacheControl cacheControl = new CacheControl().parse(cacheControlHeader);
       if (cacheControl.isPublic()) {
@@ -69,8 +69,8 @@ class ProxyResponseImpl implements ProxyResponse {
         if (cacheControl.maxAge() > 0) {
           maxAge = (long)cacheControl.maxAge() * 1000;
         } else {
-          String dateHeader = backResponse.getHeader(HttpHeaders.DATE);
-          String expiresHeader = backResponse.getHeader(HttpHeaders.EXPIRES);
+          String dateHeader = originResponse.getHeader(HttpHeaders.DATE);
+          String expiresHeader = originResponse.getHeader(HttpHeaders.EXPIRES);
           if (dateHeader != null && expiresHeader != null) {
             maxAge = ParseUtils.parseHeaderDate(expiresHeader).getTime() - ParseUtils.parseHeaderDate(dateHeader).getTime();
           }
@@ -79,8 +79,8 @@ class ProxyResponseImpl implements ProxyResponse {
     }
     this.maxAge = maxAge;
     this.publicCacheControl = publicCacheControl;
-    this.etag = backResponse.getHeader(HttpHeaders.ETAG);
-    this.headers = MultiMap.caseInsensitiveMultiMap().addAll(backResponse.headers());
+    this.etag = originResponse.getHeader(HttpHeaders.ETAG);
+    this.headers = MultiMap.caseInsensitiveMultiMap().addAll(originResponse.headers());
   }
 
   @Override
@@ -108,11 +108,6 @@ class ProxyResponseImpl implements ProxyResponse {
   public ProxyResponseImpl setBody(Body body) {
     this.body = body;
     return this;
-  }
-
-  @Override
-  public String statusMessage() {
-    return backResponse.statusMessage();
   }
 
   @Override
@@ -150,7 +145,7 @@ class ProxyResponseImpl implements ProxyResponse {
   @Override
   public void send(Handler<AsyncResult<Void>> completionHandler) {
     // Set stuff
-    frontResponse.setStatusCode(statusCode);
+    edgeResponse.setStatusCode(statusCode);
 
     // Date header
     Date date = HttpUtils.dateHeader(headers);
@@ -158,7 +153,7 @@ class ProxyResponseImpl implements ProxyResponse {
       date = new Date();
     }
     try {
-      frontResponse.putHeader("date", ParseUtils.formatHttpDate(date));
+      edgeResponse.putHeader("date", ParseUtils.formatHttpDate(date));
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -179,7 +174,7 @@ class ProxyResponseImpl implements ProxyResponse {
         }
       }
     }
-    frontResponse.putHeader("warning", warningHeaders);
+    edgeResponse.putHeader("warning", warningHeaders);
 
     // Handle other headers
     headers.forEach(header -> {
@@ -188,21 +183,21 @@ class ProxyResponseImpl implements ProxyResponse {
       if (name.equalsIgnoreCase("date") || name.equalsIgnoreCase("warning") || name.equalsIgnoreCase("transfer-encoding")) {
         // Skip
       } else {
-        frontResponse.headers().add(name, value);
+        edgeResponse.headers().add(name, value);
       }
     });
 
     //
     if (body == null) {
-      frontResponse.end();
+      edgeResponse.end();
       return;
     }
 
     long len = body.length();
     if (len >= 0) {
-      frontResponse.putHeader(HttpHeaders.CONTENT_LENGTH, Long.toString(len));
+      edgeResponse.putHeader(HttpHeaders.CONTENT_LENGTH, Long.toString(len));
     } else {
-      frontResponse.setChunked(true);
+      edgeResponse.setChunked(true);
     }
     ReadStream<Buffer> bodyStream = bodyFilter.apply(body.stream());
     sendResponse(bodyStream, completionHandler);
@@ -210,9 +205,9 @@ class ProxyResponseImpl implements ProxyResponse {
 
   @Override
   public ProxyResponseImpl release() {
-    if (backResponse != null) {
-      backResponse.resume();
-      backResponse = null;
+    if (originResponse != null) {
+      originResponse.resume();
+      originResponse = null;
       body = null;
       headers.clear();
     }
@@ -223,10 +218,10 @@ class ProxyResponseImpl implements ProxyResponse {
     Pipe<Buffer> pipe = body.pipe();
     pipe.endOnSuccess(true);
     pipe.endOnFailure(false);
-    pipe.to(frontResponse, ar -> {
+    pipe.to(edgeResponse, ar -> {
       if (ar.failed()) {
-        request.backRequest.reset();
-        frontResponse.reset();
+        request.edgeRequest.reset();
+        edgeResponse.reset();
       }
       completionHandler.handle(ar);
     });

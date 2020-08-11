@@ -178,7 +178,6 @@ public class HttpProxyImpl implements HttpProxy {
         Resource res = new Resource(
           absoluteUri,
           response.getStatusCode(),
-          response.statusMessage(),
           response.headers(),
           System.currentTimeMillis(),
           response.maxAge());

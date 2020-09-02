@@ -103,7 +103,11 @@ public class HttpProxyImpl implements HttpProxy {
 
   private void handleProxyRequestAndProxyResponse(ProxyRequest proxyRequest, HttpServerRequest frontRequest) {
     handleProxyRequest(proxyRequest, frontRequest, ar -> {
-      handleProxyResponse(ar.result(), ar2 -> {});
+      if (ar.succeeded()) {
+        handleProxyResponse(ar.result(), ar2 -> {});
+      } else {
+        // TODO ???
+      }
     });
   }
 

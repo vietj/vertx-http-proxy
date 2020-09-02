@@ -35,7 +35,7 @@ class Resource {
     proxyResponse.headers().addAll(headers);
     proxyResponse.setBody(Body.body(content));
     proxyResponse.send(ar -> {
-      ar.cause().printStackTrace();
+      
     });
   }
 }

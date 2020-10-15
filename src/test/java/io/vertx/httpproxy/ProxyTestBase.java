@@ -3,6 +3,7 @@ package io.vertx.httpproxy;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
@@ -56,10 +57,10 @@ public class ProxyTestBase {
     CompletableFuture<Closeable> res = new CompletableFuture<>();
     vertx.deployVerticle(new AbstractVerticle() {
       @Override
-      public void start(Future<Void> startFuture) {
+      public void start(Promise<Void> startFuture) {
         HttpClient proxyClient = vertx.createHttpClient(new HttpClientOptions(clientOptions));
         HttpServer proxyServer = vertx.createHttpServer(new HttpServerOptions(proxyOptions));
-        HttpProxy proxy = HttpProxy.reverseProxy(proxyClient);
+        HttpProxy proxy = HttpProxy.reverseProxy2(proxyClient);
         proxy.selector(selector);
         proxyServer.requestHandler(proxy);
         proxyServer.listen(ar -> startFuture.handle(ar.mapEmpty()));

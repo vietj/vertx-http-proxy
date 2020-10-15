@@ -2,14 +2,9 @@ package io.vertx.httpproxy.impl;
 
 import java.text.SimpleDateFormat;
 import java.time.DayOfWeek;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
-import java.util.function.Consumer;
 
 /**
  * @author <a href="mailto:julien@julienviet.com">Julien Viet</a>

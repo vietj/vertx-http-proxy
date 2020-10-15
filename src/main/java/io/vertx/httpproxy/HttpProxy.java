@@ -7,7 +7,6 @@ import io.vertx.core.Handler;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.net.SocketAddress;
-import io.vertx.httpproxy.impl.HttpProxyImpl;
 
 import java.util.function.Function;
 
@@ -17,21 +16,23 @@ import java.util.function.Function;
 @VertxGen
 public interface HttpProxy extends Handler<HttpServerRequest> {
 
-  static HttpProxy reverseProxy(HttpClient client) {
-    return new HttpProxyImpl(client);
+  static HttpProxy reverseProxy2(HttpClient client) {
+    return new io.vertx.httpproxy.impl.HttpProxyImpl(client);
   }
 
   @Fluent
-  HttpProxy target(SocketAddress address);
+  default HttpProxy target(SocketAddress address) {
+    return selector(req -> Future.succeededFuture(address));
+  }
 
   @Fluent
-  HttpProxy target(int port, String host);
+  default HttpProxy target(int port, String host) {
+    return target(SocketAddress.inetSocketAddress(port, host));
+  }
 
   @Fluent
   HttpProxy selector(Function<HttpServerRequest, Future<SocketAddress>> selector);
 
   void handle(HttpServerRequest request);
-
-  ProxyRequest proxy(HttpServerRequest request, SocketAddress target);
 
 }

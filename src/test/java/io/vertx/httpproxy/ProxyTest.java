@@ -2,6 +2,8 @@ package io.vertx.httpproxy;
 
 import io.vertx.core.Future;
 import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientResponse;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
@@ -31,21 +33,24 @@ public class ProxyTest extends ProxyTestBase {
     Map<String, AtomicInteger> result = Collections.synchronizedMap(new HashMap<>());
     Async latch = ctx.async();
     for (int i = 0;i < backends.length * numRequests;i++) {
-      client.getNow(8080, "localhost", "/", resp -> {
-        resp.bodyHandler(buff -> {
-          result.computeIfAbsent(buff.toString(), k -> new AtomicInteger()).getAndIncrement();
-          synchronized (result) {
-            int total = result.values().stream().reduce(0, (a, b) -> a + b.get(), (a, b) -> a + b);
-            if (total == backends.length * numRequests) {
-              for (int j = 0;j < backends.length;j++) {
-                AtomicInteger val = result.remove("" + j);
-                ctx.assertEquals(numRequests, val.get());
-              }
-              ctx.assertEquals(result, Collections.emptyMap());
-              latch.complete();
+      client
+          .request(HttpMethod.GET, 8080, "localhost", "/")
+          .compose(req -> req
+              .send()
+              .compose(HttpClientResponse::body)
+          ).onSuccess(buff -> {
+        result.computeIfAbsent(buff.toString(), k -> new AtomicInteger()).getAndIncrement();
+        synchronized (result) {
+          int total = result.values().stream().reduce(0, (a, b) -> a + b.get(), (a, b) -> a + b);
+          if (total == backends.length * numRequests) {
+            for (int j = 0;j < backends.length;j++) {
+              AtomicInteger val = result.remove("" + j);
+              ctx.assertEquals(numRequests, val.get());
             }
+            ctx.assertEquals(result, Collections.emptyMap());
+            latch.complete();
           }
-        });
+        }
       });
     }
   }
